@@ -128,7 +128,7 @@ Para executar o software visualizando logs detalhados de DDC/CI, troca de proces
 
 ## 🤝 Créditos e Agradecimentos
 
-- **[reverse-engineer-anything (REA)](https://github.com/):** Agradecimento especial às ferramentas e metodologias de engenharia reversa do REA, fundamentais para a análise e recuperação dos opcodes proprietários de hardware (tabelas TPV VCP `0xF8 / 0xE1`, opcodes de saturação `Game Color`, controle de sombras `Shadow Control`, curvas de `Gamma` e perfis de `HDR Mode` do microcontrolador AOC).
+- **[reverse-engineer-anything (REA)](https://github.com/morluto/rea):** Agradecimento especial às ferramentas e metodologias de engenharia reversa do REA, fundamentais para a análise e recuperação dos opcodes proprietários de hardware (tabelas TPV VCP `0xF8 / 0xE1`, opcodes de saturação `Game Color`, controle de sombras `Shadow Control`, curvas de `Gamma` e perfis de `HDR Mode` do microcontrolador AOC).
 - **Comunidade Tauri & Rust:** Pela excelente infraestrutura desktop multiplataforma e de baixo consumo de memória.
 
 ---
