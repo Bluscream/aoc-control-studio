@@ -11,7 +11,11 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "tauri": "tauri",
+    "build:portable": "pnpm build && cargo build --release --manifest-path src-tauri/Cargo.toml --bin app",
+    "build:nsis": "pnpm build && tauri build --bundles nsis",
+    "build:msi": "pnpm build && tauri build --bundles msi"
   },
   "overrides": {
     "rolldown": "1.2.1"

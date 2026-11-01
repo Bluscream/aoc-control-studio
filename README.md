@@ -37,7 +37,7 @@ Além do controle manual de imagem, o projeto traz um **sistema inteligente de a
 - **Troca Automática em Tempo Real:** Detecta a janela em primeiro plano e aplica o perfil correto em milissegundos.
 - **Retorno ao Perfil Padrão do Windows:** Escolha qual perfil você quer na Área de Trabalho e o app restaura ele assim que fechar os jogos.
 - **Toggle Individual por Perfil:** Ative ou pause a troca automática de cada perfil diretamente pelo card na tela inicial, sem precisar remover os executáveis cadastrados.
-- **Detecção com Suporte a Jogos em Modo Administrador:** Inspeção profunda via snapshot de kernel (`Toolhelp32Snapshot`) e ativação automática de privilégios (`SeDebugPrivilege`), garantindo que até jogos rodando como Administrador ou com anti-cheats (Vanguard, BattlEye, EAC) sejam detectados.
+- **Detecção com Suporte a Jogos em Modo Administrador:** Inspeção profunda via snapshot de kernel (`Toolhelp32Snapshot`) e ativação automática de privilégios (`SeDebugPrivilege`), garantindo que até jogos rodando como Administrador ou com anti-cheats (Vanguard, BattlEye, EAC) sejam detectados mesmo com o app aberto em modo de usuário comum.
 
 ### 🛡️ Proteções e Travas de Hardware Fiéis ao Firmware AOC
 O monitor possui regras internas que cancelam modos caso comandos conflitantes sejam enviados. O AOC Control Studio respeita e avisa sobre todas elas:
@@ -60,79 +60,80 @@ O monitor possui regras internas que cancelam modos caso comandos conflitantes s
 
 ---
 
-## 📦 Como Compilar e Empacotar
+## 📦 Como Compilar e Distribuir
 
-### Pré-requisitos
-1. [Node.js](https://nodejs.org/) (versão 20+ recomendada) ou [pnpm](https://pnpm.io/)
-2. [Rust](https://www.rust-lang.org/tools/install) (toolchain GNU `x86_64-pc-windows-gnu` ou MSVC `x86_64-pc-windows-msvc`)
-3. MinGW-w64 (caso utilize o target GNU)
+> [!NOTE]
+> Execute os comandos no PowerShell na **raiz do projeto** (`AOC Menu Corrigido`).
+> Para sua conveniência, incluímos o script automatizado `.\build.ps1`, que resolve automaticamente os caminhos com espaços no Windows e gera os arquivos finais na pasta `.\Distribuicao`.
 
-```bash
-# 1. Clone o repositório
-git clone https://github.com/SEU_USUARIO/AOC-Menu-Corrigido.git
-cd "AOC-Menu-Corrigido/aoc-control-studio"
-
-# 2. Instale as dependências do frontend
+### Instalação das Dependências
+Antes de compilar pela primeira vez, instale as dependências:
+```powershell
 pnpm install
 ```
 
-### 1️⃣ Executar em Modo de Desenvolvimento
-```bash
+---
+
+### Executar em Modo de Desenvolvimento (Opcional)
+```powershell
 pnpm tauri dev
 ```
 
-### 2️⃣ Gerar Versão Portátil (Standalone / Sem Instalação)
-Para compilar apenas o binário `.exe` otimizado:
-```bash
-# Compilar os assets web
-pnpm build
+---
 
-# Compilar o binário release com Cargo
-cargo build --release --bin app
+### Gerar Versão Portátil (.zip pronto para uso)
+Compila o executável release e empacota automaticamente junto à `WebView2Loader.dll` dentro de `.\Distribuicao\AOC-Control-Studio-Portable.zip`:
+
+```powershell
+.\build.ps1 -Type portable
 ```
-O executável será gerado em:
-`target/release/app.exe` (renomeie para `AOC-Control-Studio.exe` e utilize acompanhado de `WebView2Loader.dll`).
 
-### 3️⃣ Gerar o Instalador com Instalação (.exe Setup via NSIS)
-Gera o instalador padrão do Windows com assistente de instalação, criação de atalhos no Menu Iniciar/Desktop e desinstalador no Painel de Controle:
-```bash
-pnpm tauri build --bundles nsis
+---
+
+### Gerar Instalador (.exe Setup via NSIS)
+Compila e gera o instalador padrão do Windows com assistente de instalação, atalhos no Desktop/Iniciar e desinstalador limpo:
+
+```powershell
+.\build.ps1 -Type nsis
 ```
-O instalador será gerado em:
-`src-tauri/target/release/bundle/nsis/AOC Control Studio_1.0.0_x64-setup.exe`
+*O instalador será gerado em `.\Distribuicao\AOC-Control-Studio-Setup.exe`.*
 
-### 4️⃣ Gerar Pacote Corporativo Windows Installer (.msi)
-Gera o arquivo MSI para implantação automatizada ou corporativa:
-```bash
-pnpm tauri build --bundles msi
+---
+
+### Gerar Pacote Corporativo Windows Installer (.msi)
+Gera o pacote `.msi` para instalações corporativas ou silenciosas:
+
+```powershell
+.\build.ps1 -Type msi
 ```
-O pacote será gerado em:
-`src-tauri/target/release/bundle/msi/AOC Control Studio_1.0.0_x64_en-US.msi`
+*O pacote será gerado em `.\Distribuicao\AOC-Control-Studio.msi`.*
 
-### 5️⃣ Gerar Todos os Pacotes de Distribuição de uma só vez
-```bash
-pnpm tauri build
+---
+
+### Gerar Todos os Formatos de uma só vez (Setup, Portable e MSI)
+```powershell
+.\build.ps1 -Type all
 ```
 
 ---
 
 ## 💡 Modo Verbose (Depuração)
 
-Para executar o software visualizando logs detalhados de DDC/CI, troca de processos e chamadas de hardware:
+Para executar o software visualizando logs detalhados de DDC/CI, detecção de processos e chamadas de hardware no terminal:
 ```powershell
 .\AOC-Control-Studio.exe -v
 ```
-*(Também é gerado automaticamente o arquivo `aoc_debug.log` no diretório de execução).*
+*(Também é gravado automaticamente o arquivo `aoc_debug.log` no diretório de execução).*
 
 ---
 
 ## 🤝 Créditos e Agradecimentos
 
 - **[reverse-engineer-anything (REA)](https://github.com/morluto/rea):** Agradecimento especial às ferramentas e metodologias de engenharia reversa do REA, fundamentais para a análise e recuperação dos opcodes proprietários de hardware (tabelas TPV VCP `0xF8 / 0xE1`, opcodes de saturação `Game Color`, controle de sombras `Shadow Control`, curvas de `Gamma` e perfis de `HDR Mode` do microcontrolador AOC).
-- **Comunidade Tauri & Rust:** Pela excelente infraestrutura desktop multiplataforma e de baixo consumo de memória.
+- **Comunidade Tauri & Rust:** Pela infraestrutura desktop moderna de alto desempenho e baixíssimo consumo de memória RAM.
 
 ---
 
 ## 📄 Licença
 
-Distribuído sob a licença MIT. Consulte `LICENSE` para mais informações.
+Distribuído sob a licença [MIT](LICENSE).
