@@ -39,3 +39,5 @@ pnpm-lock.yaml
 # Binário portátil Linux gerado pelo build.sh
 /AOC-Control-Studio
 package-lock.json
+
+src-tauri/Cargo.lock
