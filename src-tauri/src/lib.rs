@@ -67,10 +67,39 @@ pub fn log_msg(tag: &str, msg: &str) {
     }
 }
 
+#[derive(Debug, Clone)]
+struct OverdriveVerification {
+    target: String,
+    attempts: u32,
+    max_attempts: u32,
+    next_check: Instant,
+}
+
 pub struct AppState {
     driver: Mutex<Option<DdcDriver>>,
     last_applied: Mutex<Option<MonitorSettings>>,
     auto_config: Mutex<Option<AutoProfileConfig>>,
+    overdrive_verifier: Mutex<Option<OverdriveVerification>>,
+}
+
+fn trigger_overdrive_verification(state: &AppState, target_overdrive: String) {
+    if target_overdrive.is_empty() {
+        return;
+    }
+    log_msg(
+        "OverdriveVerifier",
+        &format!(
+            "Agendando verificação de Overdrive para '{}' (iniciando em 2s)...",
+            target_overdrive
+        ),
+    );
+    let mut guard = state.overdrive_verifier.lock().unwrap();
+    *guard = Some(OverdriveVerification {
+        target: target_overdrive,
+        attempts: 0,
+        max_attempts: 5,
+        next_check: Instant::now() + Duration::from_millis(2000),
+    });
 }
 
 fn ensure_driver(guard: &mut Option<DdcDriver>) -> Result<&mut DdcDriver, String> {
@@ -626,6 +655,15 @@ fn read_hardware_settings(state: State<'_, AppState>) -> Result<MonitorSettings,
     let live = read_hardware_settings_internal(driver);
     log_msg("Rust", "<< read_hardware_settings concluído com sucesso");
     *state.last_applied.lock().unwrap() = Some(live.clone());
+
+    // Se o hardware já estiver com o overdrive alvo, encerra polling pendente
+    let mut v_guard = state.overdrive_verifier.lock().unwrap();
+    if let Some(v) = v_guard.as_ref() {
+        if map_overdrive_to_hw(&v.target) == map_overdrive_to_hw(&live.overdrive) {
+            *v_guard = None;
+        }
+    }
+
     Ok(live)
 }
 
@@ -647,7 +685,13 @@ fn apply_changed_settings(
             res.warnings.len()
         ),
     );
-    *state.last_applied.lock().unwrap() = Some(current);
+    *state.last_applied.lock().unwrap() = Some(current.clone());
+    drop(guard);
+
+    if current.overdrive != initial.overdrive || current.game_mode != initial.game_mode {
+        trigger_overdrive_verification(&state, current.overdrive);
+    }
+
     Ok(res)
 }
 
@@ -674,7 +718,12 @@ fn apply_monitor_settings(
             res.warnings.len()
         ),
     );
-    *last_guard = Some(settings);
+    *last_guard = Some(settings.clone());
+    drop(last_guard);
+    drop(guard);
+
+    trigger_overdrive_verification(&state, settings.overdrive);
+
     Ok(res)
 }
 
@@ -1038,11 +1087,157 @@ fn start_auto_profile_monitor(app_handle: tauri::AppHandle) {
             if let Ok(driver) = ensure_driver(&mut guard) {
                 let prev = state.last_applied.lock().unwrap().clone();
                 let _ = apply_diff_internal(driver, &target_settings, prev.as_ref());
-                *state.last_applied.lock().unwrap() = Some(target_settings);
+                *state.last_applied.lock().unwrap() = Some(target_settings.clone());
             }
+            drop(guard);
+
+            trigger_overdrive_verification(&state, target_settings.overdrive);
 
             // Emite evento para que a interface atualize o card selecionado
             let _ = app_handle.emit("auto-profile-changed", target_id);
+        }
+    });
+}
+
+fn start_overdrive_verifier_loop(app_handle: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        loop {
+            sleep(Duration::from_millis(1000));
+
+            let state = app_handle.state::<AppState>();
+
+            // 1. Verifica se há checagem pendente e se o tempo de estabilização já passou
+            let check_data = {
+                let guard = state.overdrive_verifier.lock().unwrap();
+                match &*guard {
+                    Some(v) => {
+                        if Instant::now() < v.next_check {
+                            None
+                        } else {
+                            Some((v.target.clone(), v.attempts, v.max_attempts))
+                        }
+                    }
+                    None => None,
+                }
+            };
+
+            let (target, attempts, max_attempts) = match check_data {
+                Some(d) => d,
+                None => continue, // Polling desligado ou aguardando próximo intervalo
+            };
+
+            let target_hw = map_overdrive_to_hw(&target);
+            log_msg(
+                "OverdriveVerifier",
+                &format!(
+                    "Verificando Overdrive no monitor (esperado: '{}' [código {}], checagem {}/{})...",
+                    target,
+                    target_hw,
+                    attempts + 1,
+                    max_attempts
+                ),
+            );
+
+            // 2. Tenta obter lock do driver DDC
+            let mut guard = match state.driver.lock() {
+                Ok(g) => g,
+                Err(_) => continue,
+            };
+
+            let driver = match ensure_driver(&mut guard) {
+                Ok(d) => d,
+                Err(e) => {
+                    log_msg("OverdriveVerifier", &format!("Falha ao conectar driver DDC: {}", e));
+                    let mut v_guard = state.overdrive_verifier.lock().unwrap();
+                    if let Some(v) = v_guard.as_mut() {
+                        v.attempts += 1;
+                        v.next_check = Instant::now() + Duration::from_millis(2000);
+                        if v.attempts >= v.max_attempts {
+                            log_msg(
+                                "OverdriveVerifier",
+                                "Limite de tentativas atingido após erros de conexão. Desligando polling.",
+                            );
+                            *v_guard = None;
+                        }
+                    }
+                    continue;
+                }
+            };
+
+            // 3. Lê o Overdrive atual diretamente do hardware via DDC (TPV F8 E1 51)
+            match driver.get_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_OVERDRIVE) {
+                Ok((cur_code, _)) => {
+                    let cur_str = map_overdrive_from_hw(cur_code);
+                    if cur_code == target_hw {
+                        log_msg(
+                            "OverdriveVerifier",
+                            &format!(
+                                "OK! Overdrive confirmado em '{}' no hardware do monitor. Polling desligado com sucesso.",
+                                cur_str
+                            ),
+                        );
+                        let mut v_guard = state.overdrive_verifier.lock().unwrap();
+                        *v_guard = None; // Desliga o polling até a próxima troca de perfil
+                        let _ = app_handle.emit("overdrive-verified", &cur_str);
+                    } else {
+                        log_msg(
+                            "OverdriveVerifier",
+                            &format!(
+                                "Divergência detectada: hardware está '{}' (código {}), mas o perfil requer '{}' (código {}). Reaplicando...",
+                                cur_str, cur_code, target, target_hw
+                            ),
+                        );
+                        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_OVERDRIVE, target_hw) {
+                            Ok(()) => {
+                                log_msg(
+                                    "OverdriveVerifier",
+                                    &format!("Comando Overdrive ('{}') reaplicado no monitor.", target),
+                                );
+                            }
+                            Err(e) => {
+                                log_msg(
+                                    "OverdriveVerifier",
+                                    &format!("Erro ao reenviar Overdrive ao monitor: {}", e),
+                                );
+                            }
+                        }
+
+                        let mut v_guard = state.overdrive_verifier.lock().unwrap();
+                        if let Some(v) = v_guard.as_mut() {
+                            v.attempts += 1;
+                            v.next_check = Instant::now() + Duration::from_millis(2500);
+                            if v.attempts >= v.max_attempts {
+                                log_msg(
+                                    "OverdriveVerifier",
+                                    &format!(
+                                        "Limite de {} tentativas atingido (o monitor pode estar com Overdrive travado pelo Modo de Jogo atual). Desligando polling.",
+                                        v.max_attempts
+                                    ),
+                                );
+                                *v_guard = None;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log_msg(
+                        "OverdriveVerifier",
+                        &format!("Erro na leitura DDC do Overdrive: {}. Aguardando próxima checagem.", e),
+                    );
+                    let mut v_guard = state.overdrive_verifier.lock().unwrap();
+                    if let Some(v) = v_guard.as_mut() {
+                        v.attempts += 1;
+                        v.next_check = Instant::now() + Duration::from_millis(2500);
+                        if v.attempts >= v.max_attempts {
+                            log_msg(
+                                "OverdriveVerifier",
+                                "Limite de tentativas atingido após erros de leitura. Desligando polling.",
+                            );
+                            *v_guard = None;
+                        }
+                    }
+                }
+            }
         }
     });
 }
@@ -1065,6 +1260,7 @@ pub fn run() {
             driver: Mutex::new(initial_driver),
             last_applied: Mutex::new(None),
             auto_config: Mutex::new(None),
+            overdrive_verifier: Mutex::new(None),
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -1077,6 +1273,7 @@ pub fn run() {
             win_process::enable_debug_privilege();
 
             start_auto_profile_monitor(app.handle().clone());
+            start_overdrive_verifier_loop(app.handle().clone());
 
             let show_item = tauri::menu::MenuItem::with_id(app, "show", "Abrir AOC Control Studio", true, None::<&str>)?;
             let quit_item = tauri::menu::MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
