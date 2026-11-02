@@ -8,6 +8,13 @@ use ddc::windows::WindowsDdcManager as DdcDriver;
 #[cfg(target_os = "linux")]
 use ddc::linux::LinuxDdcManager as DdcDriver;
 
+#[cfg(target_os = "linux")]
+mod linux_process;
+#[cfg(target_os = "linux")]
+use linux_process as app_process;
+#[cfg(target_os = "windows")]
+use win_process as app_process;
+
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,20 +27,42 @@ static VERBOSE_MODE: AtomicBool = AtomicBool::new(false);
 static START_INSTANT: LazyLock<Instant> = LazyLock::new(Instant::now);
 static LOG_FILE: Mutex<Option<std::fs::File>> = Mutex::new(None);
 
+/// Caminho de um arquivo de log. No Windows fica no diretório de execução (como
+/// antes); no Linux vai para `$XDG_STATE_HOME/aoc-control-studio` (padrão
+/// `~/.local/state/aoc-control-studio`), pois o diretório de trabalho de apps
+/// iniciados pelo menu costuma ser `$HOME` ou somente leitura (AppImage).
+pub fn log_path(file_name: &str) -> std::path::PathBuf {
+    #[cfg(target_os = "linux")]
+    {
+        let base = std::env::var_os("XDG_STATE_HOME")
+            .map(std::path::PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/state")));
+        if let Some(base) = base {
+            let dir = base.join("aoc-control-studio");
+            if std::fs::create_dir_all(&dir).is_ok() {
+                return dir.join(file_name);
+            }
+        }
+    }
+    std::path::PathBuf::from(file_name)
+}
+
 pub fn set_verbose(v: bool) {
     VERBOSE_MODE.store(v, Ordering::SeqCst);
+    let log_path = log_path("aoc_debug.log");
     let log_file = OpenOptions::new()
         .create(true)
         .write(true)
         .append(true)
-        .open("aoc_debug.log")
+        .open(&log_path)
         .ok();
     *LOG_FILE.lock().unwrap() = log_file;
 
     if v {
         log_msg("Init", "=================================================");
         log_msg("Init", " AOC Control Studio iniciado com modo Verbose (-v)");
-        log_msg("Init", " Logs exibidos no terminal e gravados em aoc_debug.log");
+        log_msg("Init", &format!(" Logs exibidos no terminal e gravados em {}", log_path.display()));
         log_msg("Init", "=================================================");
     }
 }
@@ -773,7 +802,52 @@ fn update_auto_profile_config(
 
 #[tauri::command]
 fn get_running_apps() -> Vec<RunningAppInfo> {
-    win_process::list_running_apps()
+    app_process::list_running_apps()
+}
+
+/// Normaliza um nome de executável para comparação (minúsculas, sem `.exe`),
+/// permitindo vincular tanto `cs2.exe` (Windows/Proton) quanto `firefox` (Linux).
+fn normalize_exe(name: &str) -> String {
+    let lower = name.trim().to_lowercase();
+    lower.strip_suffix(".exe").map(str::to_string).unwrap_or(lower)
+}
+
+fn is_self_exe(name: &str) -> bool {
+    matches!(
+        normalize_exe(name).as_str(),
+        "aoc-control-studio" | "aoc control studio" | "app"
+    )
+}
+
+/// Identifica o "executável atual" usado pela automação de perfis.
+#[cfg(target_os = "windows")]
+fn detect_current_exe(_config: Option<&AutoProfileConfig>) -> Option<String> {
+    app_process::get_foreground_exe_name()
+}
+
+/// No Linux usa a janela X11/XWayland em foco (jogos Wine/Proton/Steam). Quando o
+/// foco está em uma janela Wayland nativa (sem API padrão de foco), verifica se
+/// algum executável vinculado está em execução; caso contrário, considera Desktop.
+#[cfg(target_os = "linux")]
+fn detect_current_exe(config: Option<&AutoProfileConfig>) -> Option<String> {
+    if let Some(fg) = app_process::get_foreground_exe_name() {
+        return Some(fg);
+    }
+    let config = config?;
+    let running = app_process::running_process_names();
+    for profile in &config.profiles {
+        for exe in &profile.exes {
+            if running.contains(&normalize_exe(exe)) {
+                return Some(normalize_exe(exe));
+            }
+        }
+    }
+    Some("__desktop__".to_string())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+fn detect_current_exe(_config: Option<&AutoProfileConfig>) -> Option<String> {
+    None
 }
 
 #[cfg(target_os = "windows")]
@@ -1020,12 +1094,9 @@ mod win_process {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-mod win_process {
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+mod app_process {
     use super::*;
-    pub fn get_foreground_exe_name() -> Option<String> {
-        None
-    }
     pub fn list_running_apps() -> Vec<RunningAppInfo> {
         Vec::new()
     }
@@ -1039,27 +1110,29 @@ fn start_auto_profile_monitor(app_handle: tauri::AppHandle) {
         loop {
             sleep(Duration::from_millis(800));
 
-            let current_exe = win_process::get_foreground_exe_name().unwrap_or_default();
+            let state = app_handle.state::<AppState>();
+            let config_opt = state.auto_config.lock().unwrap().clone();
+
+            let current_exe = detect_current_exe(config_opt.as_ref()).unwrap_or_default();
             if current_exe.is_empty() || current_exe == last_foreground_exe {
                 continue;
             }
             last_foreground_exe = current_exe.clone();
 
             // Não aplica mudanças enquanto o usuário estiver interagindo com a própria interface do app
-            if current_exe == "aoc-control-studio.exe" || current_exe == "app.exe" {
+            if is_self_exe(&current_exe) {
                 continue;
             }
 
-            let state = app_handle.state::<AppState>();
-            let config_opt = state.auto_config.lock().unwrap().clone();
             let config = match config_opt {
                 Some(c) if c.enabled => c,
                 _ => continue,
             };
 
             // Busca se o executável em foco está associado a algum perfil específico
+            let current_norm = normalize_exe(&current_exe);
             let matched = config.profiles.iter().find(|p| {
-                p.exes.iter().any(|e| e.to_lowercase() == current_exe)
+                p.exes.iter().any(|e| normalize_exe(e) == current_norm)
             });
 
             let (target_id, target_settings) = match matched {

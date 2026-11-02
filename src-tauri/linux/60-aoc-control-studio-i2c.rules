@@ -1,0 +1,6 @@
+# AOC Control Studio — acesso DDC/CI (I2C) ao monitor sem root.
+# Concede acesso ao usuário logado na sessão local (tag uaccess) apenas aos
+# barramentos I2C pertencentes à placa de vídeo (classe PCI 0x0300xx / 0x0380xx),
+# mesmo critério usado pelo ddcutil.
+SUBSYSTEM=="i2c-dev", KERNEL=="i2c-[0-9]*", ATTRS{class}=="0x030000", TAG+="uaccess"
+SUBSYSTEM=="i2c-dev", KERNEL=="i2c-[0-9]*", ATTRS{class}=="0x038000", TAG+="uaccess"

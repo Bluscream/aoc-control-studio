@@ -32,7 +32,7 @@ fn main() {
 
     std::panic::set_hook(Box::new(|info| {
         let err_msg = format!("PANIC: {:?}", info);
-        let _ = std::fs::write("panic.log", &err_msg);
+        let _ = std::fs::write(app_lib::log_path("panic.log"), &err_msg);
         app_lib::log_msg("Panic", &err_msg);
     }));
 

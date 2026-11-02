@@ -39,6 +39,25 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Utility",
+    "shortDescription": "Controle DDC/CI para monitores AOC",
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1"],
+        "files": {
+          "/usr/lib/udev/rules.d/60-aoc-control-studio-i2c.rules": "linux/60-aoc-control-studio-i2c.rules",
+          "/usr/lib/modules-load.d/aoc-control-studio-i2c.conf": "linux/i2c-dev.conf"
+        },
+        "postInstallScript": "linux/postinst.sh"
+      },
+      "rpm": {
+        "files": {
+          "/usr/lib/udev/rules.d/60-aoc-control-studio-i2c.rules": "linux/60-aoc-control-studio-i2c.rules",
+          "/usr/lib/modules-load.d/aoc-control-studio-i2c.conf": "linux/i2c-dev.conf"
+        },
+        "postInstallScript": "linux/postinst.sh"
+      }
+    }
   }
 }

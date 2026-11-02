@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/badge/TypeScript-5.8-blue?logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/TailwindCSS-v4-38B2AC?logo=tailwind-css&logoColor=white" alt="Tailwind CSS" />
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white" alt="Windows" />
+  <img src="https://img.shields.io/badge/Platform-Linux-FCC624?logo=linux&logoColor=black" alt="Linux" />
 </p>
 
 ---
@@ -114,6 +115,37 @@ Gera o pacote `.msi` para instalações corporativas ou silenciosas:
 ```powershell
 .\build.ps1 -Type all
 ```
+
+---
+
+## 🐧 Linux (Wayland / X11)
+
+Ambiente de referência: **Pop!_OS 24.04 (COSMIC, Wayland)** com Radeon RX 6600 e AOC 24G2 via DisplayPort. O backend Linux fala DDC/CI diretamente com o monitor através do `/dev/i2c-*` (módulo `i2c-dev`), descobrindo o barramento certo pelo conector DRM (`/sys/class/drm/cardN-DP-X`) e pelo EDID.
+
+### 1. Preparar o sistema (uma única vez)
+```bash
+sudo ./scripts/setup-linux.sh            # dependências de build (WebKitGTK etc.) + acesso I2C
+sudo ./scripts/setup-linux.sh --no-deps  # apenas acesso I2C (quem só vai usar o app)
+```
+O script carrega o `i2c-dev` (agora e no boot) e instala uma regra udev (`uaccess`) que libera os barramentos I2C **da placa de vídeo** para o usuário logado — sem rodar o app como root. Os pacotes `.deb`/`.rpm` já instalam essa regra automaticamente.
+
+### 2. Desenvolvimento e build
+```bash
+pnpm install
+pnpm tauri dev           # modo desenvolvimento
+./build.sh               # binário portátil + .deb + .AppImage + .rpm em ./Distribuicao
+./build.sh deb           # ou: portable | appimage | rpm
+```
+
+### Diferenças em relação ao Windows
+| Recurso | Linux |
+| --- | --- |
+| Controles DDC/CI e TPV (F8 E1) | ✅ Idênticos ao Windows (I2C direto) |
+| Automação por app | Janela em foco via X11/XWayland (jogos Steam/Proton/Wine). Com foco em janela Wayland nativa, o perfil é escolhido pelo executável vinculado que estiver **em execução** |
+| Nomes de executáveis | `cs2.exe` (Proton) e `cs2` (nativo) são equivalentes — a extensão `.exe` é ignorada na comparação |
+| FreeSync / VRR | Via compositor: `cosmic-randr` (COSMIC) ou `kscreen-doctor` (KDE) |
+| HDR do sistema | Controlado pelo compositor; os perfis HDR do monitor (Picture/Movie/Game) funcionam normalmente |
+| Logs | `~/.local/state/aoc-control-studio/aoc_debug.log` |
 
 ---
 
