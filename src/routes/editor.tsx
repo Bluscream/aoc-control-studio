@@ -19,6 +19,7 @@ import {
   Laptop,
   Search,
   Lock,
+  Download,
 } from "lucide-react";
 import {
   defaultSettings,
@@ -33,6 +34,8 @@ import {
   getDefaultModeId,
   setDefaultModeId,
   fetchRunningApps,
+  exportSingleProfile,
+  resetBuiltInModeToDefault,
   type Settings,
   type MonitorInfo,
   type RunningAppInfo,
@@ -49,12 +52,14 @@ export const Route = createFileRoute("/editor")({
   component: Editor,
 });
 
+const IS_LINUX = typeof navigator !== "undefined" && /linux/i.test(navigator.userAgent);
+
 const tabs = [
   { id: "image", label: "Imagem", icon: Sun },
   { id: "color", label: "Cor", icon: Palette },
   { id: "perf", label: "Desempenho", icon: Zap },
   { id: "extra", label: "Recursos", icon: Sparkles },
-  { id: "apps", label: "Aplicativos (.exe)", icon: Gamepad2 },
+  { id: "apps", label: "Aplicativos", icon: Gamepad2 },
 ] as const;
 
 function Editor() {
@@ -139,7 +144,6 @@ function Editor() {
   const handleAddExe = (exe: string) => {
     let clean = exe.trim().toLowerCase();
     if (!clean) return;
-    if (!clean.endsWith(".exe")) clean += ".exe";
     if (!assignedExes.includes(clean)) {
       setAssignedExesState([...assignedExes, clean]);
     }
@@ -200,6 +204,22 @@ function Editor() {
 
   const manualLumLocked = !isGameModeActive && !isEcoModeActive && s.dcr;
 
+  const isBuiltIn = builtInModes.some((b) => b.id === id);
+
+  const handleResetToDefault = () => {
+    const orig = resetBuiltInModeToDefault(id);
+    if (orig) {
+      setS(orig);
+      const origExes = getAssignedExes(id);
+      setAssignedExesState(origExes);
+      const b = builtInModes.find((x) => x.id === id);
+      if (b) setName(b.name);
+      setWarnings([
+        `Valores do perfil "${b?.name || id}" restaurados para o padrão original de fábrica da AOC. Clique em "Salvar no Monitor" para aplicar ao hardware.`,
+      ]);
+    }
+  };
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-12 pb-28">
       <Link
@@ -209,10 +229,12 @@ function Editor() {
         <ArrowLeft className="h-4 w-4" /> Voltar aos Modos
       </Link>
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div className="flex-1">
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(35%,1fr)_auto] items-start sm:items-center justify-between gap-6 mb-6">
+        <div className="min-w-0 pr-2">
           {builtInModes.some((b) => b.id === id) || id === "custom" ? (
-            <h1 className="mb-1 text-3xl font-semibold tracking-tight">{name || "Modo"}</h1>
+            <h1 className="mb-1 text-2xl sm:text-3xl font-semibold tracking-tight break-words">
+              {name || "Modo"}
+            </h1>
           ) : (
             <div className="mb-1 flex items-center gap-2 group">
               <input
@@ -225,47 +247,80 @@ function Editor() {
               <Pencil className="h-4 w-4 text-muted-foreground/50 group-hover:text-muted-foreground transition shrink-0" />
             </div>
           )}
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
             Ajuste os controles livremente. Os comandos só são enviados ao monitor ao clicar em Salvar.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 shrink-0 w-full sm:w-auto">
+          {isBuiltIn && (
+            <button
+              type="button"
+              onClick={handleResetToDefault}
+              title="Restaurar este perfil para as configurações originais de fábrica da AOC"
+              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-secondary text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 border border-amber-500/20 transition cursor-pointer"
+            >
+              <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Restaurar Padrão</span>
+            </button>
+          )}
+
           <button
-            onClick={handleReadFromMonitor}
-            disabled={readingHw || saving}
-            title="Carregar os valores que estão ativos agora no monitor"
-            className="flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition"
+            type="button"
+            onClick={async () => {
+              try {
+                await exportSingleProfile(id);
+              } catch (err: unknown) {
+                const e = err as { message?: string };
+                setWarnings([e?.message || "Erro ao exportar perfil."]);
+              }
+            }}
+            title="Escolher onde salvar as configurações deste perfil em arquivo JSON"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition cursor-pointer"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${readingHw ? "animate-spin" : ""}`} />
-            <span>{readingHw ? "Lendo..." : "Ler do Monitor"}</span>
+            <Download className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Exportar JSON</span>
           </button>
 
           <button
+            type="button"
+            onClick={handleReadFromMonitor}
+            disabled={readingHw || saving}
+            title="Carregar os valores que estão ativos agora no monitor"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition cursor-pointer"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${readingHw ? "animate-spin" : ""}`} />
+            <span className="truncate">{readingHw ? "Lendo..." : "Ler do Monitor"}</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleSave}
             disabled={saving || !hasChanges}
-            className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition shadow-sm ${
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition shadow-sm ${
+              !isBuiltIn ? "col-span-2" : ""
+            } ${
               savedSuccess
                 ? "bg-emerald-600 text-white"
                 : hasChanges
-                  ? "bg-primary text-primary-foreground hover:opacity-90 shadow-glow"
+                  ? "bg-primary text-primary-foreground hover:opacity-90 shadow-glow cursor-pointer"
                   : "bg-secondary text-muted-foreground opacity-50 cursor-not-allowed"
             }`}
           >
             {saving ? (
               <>
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                <span>Aplicando...</span>
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent shrink-0" />
+                <span className="truncate">Aplicando...</span>
               </>
             ) : savedSuccess ? (
               <>
-                <Check className="h-4 w-4 stroke-[3]" />
-                <span>Salvo e Aplicado!</span>
+                <Check className="h-3.5 w-3.5 stroke-[3] shrink-0" />
+                <span className="truncate">Salvo e Aplicado!</span>
               </>
             ) : (
               <>
-                <Save className="h-4 w-4" />
-                <span>{hasChanges ? "Salvar no Monitor" : "Sem alterações"}</span>
+                <Save className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{hasChanges ? "Salvar no Monitor" : "Sem alterações"}</span>
               </>
             )}
           </button>
@@ -426,7 +481,7 @@ function Editor() {
                 <p className="leading-relaxed">
                   {isGameModeActive
                     ? `O Modo de Jogo AOC calibra e bloqueia o controle manual de Game Color (saturação).`
-                    : `O Modo HDR ativo assume a colorimetria do painel e bloqueia Game Color e o Filtro de Luz Azul (Low Blue Light).`}
+                    : `O Modo HDR ativo assume a colorimetria do painel e bloqueia a Temperatura de Cor, Game Color e o Filtro de Luz Azul (Low Blue Light).`}
                 </p>
               </div>
             </div>
@@ -437,13 +492,39 @@ function Editor() {
               label="Predefinição"
               value={s.colorTemp}
               options={["sRGB", "Quente", "Normal", "Frio", "UserRGB"]}
+              disabled={isHdrModeActive}
+              disabledReason={hdrModeBlockReason}
               onChange={set("colorTemp")}
             />
             {s.colorTemp === "UserRGB" && (
               <div className="space-y-4 pt-2">
-                <Slider label="Vermelho (R)" value={s.r} min={0} max={100} onChange={set("r")} />
-                <Slider label="Verde (G)" value={s.g} min={0} max={100} onChange={set("g")} />
-                <Slider label="Azul (B)" value={s.b} min={0} max={100} onChange={set("b")} />
+                <Slider
+                  label="Vermelho (R)"
+                  value={s.r}
+                  min={0}
+                  max={100}
+                  disabled={isHdrModeActive}
+                  disabledReason={hdrModeBlockReason}
+                  onChange={set("r")}
+                />
+                <Slider
+                  label="Verde (G)"
+                  value={s.g}
+                  min={0}
+                  max={100}
+                  disabled={isHdrModeActive}
+                  disabledReason={hdrModeBlockReason}
+                  onChange={set("g")}
+                />
+                <Slider
+                  label="Azul (B)"
+                  value={s.b}
+                  min={0}
+                  max={100}
+                  disabled={isHdrModeActive}
+                  disabledReason={hdrModeBlockReason}
+                  onChange={set("b")}
+                />
               </div>
             )}
           </Section>
@@ -538,7 +619,7 @@ function Editor() {
               description={
                 monInfo && !monInfo.adaptiveSyncSupported
                   ? "Deixe 'Adaptive-Sync' ligado uma única vez nos botões físicos do monitor (Config. Jogo → Adaptive-Sync) para liberar o controle via software."
-                  : "Ativa o AMD FreeSync no driver Radeon e a Taxa de Atualização Variável (VRR) nas configurações gráficas do Windows para eliminar tearing"
+                  : "Ativa o AMD FreeSync no driver Radeon e a Taxa de Atualização Variável (VRR) nas configurações de tela do sistema para eliminar tearing"
               }
               badge={
                 monInfo
@@ -550,15 +631,27 @@ function Editor() {
               on={s.adaptiveSync}
               onChange={set("adaptiveSync")}
             />
-            <div className="rounded-xl bg-secondary/50 p-3 text-xs text-muted-foreground/90 space-y-1">
-              <p className="font-medium text-foreground">💡 Informação sobre o Windows 11:</p>
-              <p>
-                A linha <span className="font-mono text-primary">"Taxa de atualização variável: Com suporte (48 Hz - 165 Hz)"</span> no Windows confirma que o FreeSync está 100% ativo.
-              </p>
-              <p>
-                A opção <em>"Taxa de atualização dinâmica"</em> exibida nas configurações do Windows é o DRR (exclusivo para economia de bateria de laptops) e não se aplica a placas de vídeo desktop como a RX 6600.
-              </p>
-            </div>
+            {IS_LINUX ? (
+              <div className="rounded-xl bg-secondary/50 p-3 text-xs text-muted-foreground/90 space-y-1">
+                <p className="font-medium text-foreground">💡 Informação sobre o Linux:</p>
+                <p>
+                  No Linux o VRR é controlado pelo compositor (COSMIC via <span className="font-mono text-primary">cosmic-randr</span>, KDE via <span className="font-mono text-primary">kscreen-doctor</span>). Confira o estado em Configurações → Telas.
+                </p>
+                <p>
+                  Se aparecer "Requer OSD Ativo", ligue <em>Adaptive-Sync</em> nos botões físicos do monitor e verifique se o driver <span className="font-mono">amdgpu</span> anuncia suporte para a saída.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-secondary/50 p-3 text-xs text-muted-foreground/90 space-y-1">
+                <p className="font-medium text-foreground">💡 Informação sobre o Windows 11:</p>
+                <p>
+                  A linha <span className="font-mono text-primary">"Taxa de atualização variável: Com suporte (48 Hz - 165 Hz)"</span> no Windows confirma que o FreeSync está 100% ativo.
+                </p>
+                <p>
+                  A opção <em>"Taxa de atualização dinâmica"</em> exibida nas configurações do Windows é o DRR (exclusivo para economia de bateria de laptops) e não se aplica a placas de vídeo desktop como a RX 6600.
+                </p>
+              </div>
+            )}
           </Section>
         </section>
       )}
@@ -613,13 +706,13 @@ function Editor() {
 
       {tab === "apps" && (
         <section className="space-y-6">
-          {/* Perfil Padrão do Windows */}
+          {/* Perfil Padrão do Sistema */}
           <Section title="Padrão do Sistema Operacional">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl bg-secondary/40 p-4 border border-border/50">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Star className={`h-4 w-4 ${isDefault ? "text-amber-400 fill-amber-400" : "text-muted-foreground"}`} />
-                  <span className="text-sm font-semibold text-foreground">Definir como Perfil Padrão do Windows</span>
+                  <span className="text-sm font-semibold text-foreground">Definir como Perfil Padrão do Sistema</span>
                   {isDefault && (
                     <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
                       Padrão Atual
@@ -627,7 +720,7 @@ function Editor() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Quando você fechar os jogos vinculados ou simplesmente estiver navegando na Área de Trabalho do Windows, o monitor aplicará automaticamente este perfil.
+                  Quando você fechar os jogos vinculados ou simplesmente estiver navegando na Área de Trabalho, o monitor aplicará automaticamente este perfil.
                 </p>
               </div>
               <button
@@ -646,7 +739,7 @@ function Editor() {
           </Section>
 
           {/* Jogos e Executáveis Vinculados */}
-          <Section title="Jogos e Executáveis Vinculados (.exe)">
+          <Section title="Jogos e Executáveis Vinculados">
             <p className="text-xs text-muted-foreground">
               Sempre que qualquer um dos executáveis abaixo entrar em primeiro plano, o monitor alternará para este perfil automaticamente.
             </p>
@@ -655,7 +748,7 @@ function Editor() {
             <div className="flex flex-wrap gap-2 pt-1">
               {assignedExes.length === 0 ? (
                 <div className="w-full rounded-xl border border-dashed border-border/70 p-6 text-center text-xs text-muted-foreground">
-                  Nenhum executável vinculado a este perfil. Digite o nome do executável abaixo ou escolha entre os aplicativos atualmente abertos no Windows.
+                  Nenhum executável vinculado a este perfil. Digite o nome do executável abaixo ou escolha entre os aplicativos atualmente abertos no sistema.
                 </div>
               ) : (
                 assignedExes.map((exe) => (
@@ -688,7 +781,7 @@ function Editor() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleAddExe(newExe);
                   }}
-                  placeholder="Ex: cs2.exe, valorant.exe, chrome.exe..."
+                  placeholder="Ex: cs2.exe, valorant.exe, firefox, steam..."
                   className="w-full rounded-xl bg-secondary/60 border border-border/80 px-4 py-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary transition font-mono"
                 />
               </div>
@@ -705,7 +798,7 @@ function Editor() {
                 type="button"
                 onClick={handleLoadRunningApps}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border/80 bg-secondary/40 text-xs font-medium text-foreground hover:bg-secondary transition"
-                title="Detectar janelas e jogos abertos agora no Windows"
+                title="Detectar janelas e jogos abertos agora"
               >
                 <Search className="h-3.5 w-3.5 text-primary" />
                 <span>Apps Abertos Agora</span>
@@ -719,7 +812,7 @@ function Editor() {
                   <div className="flex items-center gap-2">
                     <Laptop className="h-4 w-4 text-primary" />
                     <span className="text-xs font-semibold text-foreground">
-                      Aplicativos e Jogos detectados no Windows
+                      Aplicativos e Jogos detectados
                     </span>
                   </div>
                   <button

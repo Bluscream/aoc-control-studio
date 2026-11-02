@@ -407,30 +407,32 @@ fn apply_diff_internal(
         }
     }
 
-    // 5. Temperatura de Cor e Ganhos RGB
-    let color_temp_changed = prev
-        .map(|p| p.color_temp != target.color_temp)
-        .unwrap_or(true);
-    let temp_val = map_color_temp_to_hw(&target.color_temp);
-    if color_temp_changed {
-        match driver.set_vcp(vcp::COLOR_PRESET, temp_val) {
-            Ok(()) => applied_count += 1,
-            Err(e) => warnings.push(format!("Temperatura de Cor: {}", e)),
+    // 5. Temperatura de Cor e Ganhos RGB (desativados pelo hardware quando HDR está ativo)
+    if target_hdr_val == 0 {
+        let color_temp_changed = prev
+            .map(|p| p.color_temp != target.color_temp)
+            .unwrap_or(true);
+        let temp_val = map_color_temp_to_hw(&target.color_temp);
+        if color_temp_changed {
+            match driver.set_vcp(vcp::COLOR_PRESET, temp_val) {
+                Ok(()) => applied_count += 1,
+                Err(e) => warnings.push(format!("Temperatura de Cor: {}", e)),
+            }
         }
-    }
 
-    if temp_val == 11 {
-        if color_temp_changed || prev.map(|p| p.r != target.r).unwrap_or(true) {
-            let _ = driver.set_vcp(vcp::RED_GAIN, target.r.min(100));
-            applied_count += 1;
-        }
-        if color_temp_changed || prev.map(|p| p.g != target.g).unwrap_or(true) {
-            let _ = driver.set_vcp(vcp::GREEN_GAIN, target.g.min(100));
-            applied_count += 1;
-        }
-        if color_temp_changed || prev.map(|p| p.b != target.b).unwrap_or(true) {
-            let _ = driver.set_vcp(vcp::BLUE_GAIN, target.b.min(100));
-            applied_count += 1;
+        if temp_val == 11 {
+            if color_temp_changed || prev.map(|p| p.r != target.r).unwrap_or(true) {
+                let _ = driver.set_vcp(vcp::RED_GAIN, target.r.min(100));
+                applied_count += 1;
+            }
+            if color_temp_changed || prev.map(|p| p.g != target.g).unwrap_or(true) {
+                let _ = driver.set_vcp(vcp::GREEN_GAIN, target.g.min(100));
+                applied_count += 1;
+            }
+            if color_temp_changed || prev.map(|p| p.b != target.b).unwrap_or(true) {
+                let _ = driver.set_vcp(vcp::BLUE_GAIN, target.b.min(100));
+                applied_count += 1;
+            }
         }
     }
 
@@ -798,6 +800,147 @@ fn update_auto_profile_config(
     );
     *state.auto_config.lock().unwrap() = Some(config);
     Ok(())
+}
+
+#[tauri::command]
+fn export_json_dialog(default_filename: String, contents: String) -> Result<bool, String> {
+    if let Some(path) = native_dialog::pick_save_file(&default_filename) {
+        std::fs::write(&path, contents).map_err(|e| format!("Falha ao salvar arquivo: {}", e))?;
+        log_msg("Export", &format!("Arquivo JSON salvo com sucesso em: {}", path.display()));
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod native_dialog {
+    use std::ffi::c_void;
+    use std::path::PathBuf;
+
+    type HWND = *mut c_void;
+    type HINSTANCE = *mut c_void;
+    type LPCWSTR = *const u16;
+    type LPWSTR = *mut u16;
+    type DWORD = u32;
+    type WORD = u16;
+    type LPARAM = isize;
+
+    #[repr(C)]
+    #[allow(non_snake_case)]
+    struct OPENFILENAMEW {
+        lStructSize: DWORD,
+        hwndOwner: HWND,
+        hInstance: HINSTANCE,
+        lpstrFilter: LPCWSTR,
+        lpstrCustomFilter: LPWSTR,
+        nMaxCustFilter: DWORD,
+        nFilterIndex: DWORD,
+        lpstrFile: LPWSTR,
+        nMaxFile: DWORD,
+        lpstrFileTitle: LPWSTR,
+        nMaxFileTitle: DWORD,
+        lpstrInitialDir: LPCWSTR,
+        lpstrTitle: LPCWSTR,
+        Flags: DWORD,
+        nFileOffset: WORD,
+        nFileExtension: WORD,
+        lpstrDefExt: LPCWSTR,
+        lCustData: LPARAM,
+        lpfnHook: *mut c_void,
+        lpTemplateName: LPCWSTR,
+        pvReserved: *mut c_void,
+        dwReserved: DWORD,
+        FlagsEx: DWORD,
+    }
+
+    #[link(name = "comdlg32")]
+    unsafe extern "system" {
+        fn GetSaveFileNameW(lpofn: *mut OPENFILENAMEW) -> i32;
+    }
+
+    pub fn pick_save_file(default_filename: &str) -> Option<PathBuf> {
+        unsafe {
+            let mut file_buf = [0u16; 1024];
+            let def_name_w: Vec<u16> = default_filename.encode_utf16().collect();
+            let copy_len = def_name_w.len().min(file_buf.len() - 1);
+            file_buf[..copy_len].copy_from_slice(&def_name_w[..copy_len]);
+
+            let filter = "Arquivos JSON (*.json)\0*.json\0Todos os arquivos (*.*)\0*.*\0\0"
+                .encode_utf16()
+                .collect::<Vec<u16>>();
+            let title = "Salvar Arquivo JSON\0".encode_utf16().collect::<Vec<u16>>();
+            let def_ext = "json\0".encode_utf16().collect::<Vec<u16>>();
+
+            const OFN_OVERWRITEPROMPT: DWORD = 0x00000002;
+            const OFN_PATHMUSTEXIST: DWORD = 0x00000800;
+            const OFN_EXPLORER: DWORD = 0x00080000;
+
+            let mut ofn: OPENFILENAMEW = std::mem::zeroed();
+            ofn.lStructSize = std::mem::size_of::<OPENFILENAMEW>() as DWORD;
+            ofn.lpstrFilter = filter.as_ptr();
+            ofn.lpstrFile = file_buf.as_mut_ptr();
+            ofn.nMaxFile = file_buf.len() as DWORD;
+            ofn.lpstrTitle = title.as_ptr();
+            ofn.lpstrDefExt = def_ext.as_ptr();
+            ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_EXPLORER;
+
+            if GetSaveFileNameW(&mut ofn) != 0 {
+                let len = file_buf.iter().position(|&c| c == 0).unwrap_or(file_buf.len());
+                let path_str = String::from_utf16_lossy(&file_buf[..len]);
+                if !path_str.trim().is_empty() {
+                    return Some(PathBuf::from(path_str));
+                }
+            }
+        }
+        None
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod native_dialog {
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    pub fn pick_save_file(default_filename: &str) -> Option<PathBuf> {
+        if let Ok(out) = Command::new("zenity")
+            .args(&[
+                "--file-selection",
+                "--save",
+                "--confirm-overwrite",
+                &format!("--filename={}", default_filename),
+                "--file-filter=Arquivos JSON (*.json) | *.json",
+            ])
+            .output()
+        {
+            if out.status.success() {
+                let path_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !path_str.is_empty() {
+                    return Some(PathBuf::from(path_str));
+                }
+            }
+        }
+        if let Ok(out) = Command::new("kdialog")
+            .args(&["--getsavefilename", default_filename, "*.json|Arquivos JSON (*.json)"])
+            .output()
+        {
+            if out.status.success() {
+                let path_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !path_str.is_empty() {
+                    return Some(PathBuf::from(path_str));
+                }
+            }
+        }
+        None
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+mod native_dialog {
+    use std::path::PathBuf;
+    pub fn pick_save_file(_default_filename: &str) -> Option<PathBuf> {
+        None
+    }
 }
 
 #[tauri::command]
@@ -1405,6 +1548,7 @@ pub fn run() {
             apply_monitor_settings,
             update_auto_profile_config,
             get_running_apps,
+            export_json_dialog,
             minimize_window,
             toggle_maximize_window,
             close_window,

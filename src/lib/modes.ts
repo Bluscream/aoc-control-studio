@@ -184,7 +184,7 @@ export const builtInModes: Mode[] = [
   {
     id: "fps",
     name: "FPS Competitivo",
-    subtitle: "Overdrive forte · Sombras 60 · Mira ativa",
+    subtitle: "Overdrive forte · Sombras 60",
     isBuiltIn: true,
     settings: {
       ...defaultSettings,
@@ -194,8 +194,8 @@ export const builtInModes: Mode[] = [
       overdrive: "Forte",
       shadowControl: 60,
       gameColor: 13,
-      crosshair: true,
-      frameCounter: "Sup. Direito",
+      crosshair: false,
+      frameCounter: "Desligado",
       adaptiveSync: false,
     },
   },
@@ -536,6 +536,19 @@ export function useModes() {
     remove: (id: string) => {
       saveUserModes(modes.filter((m) => m.id !== id || m.isBuiltIn));
     },
+    resetAll: () => {
+      resetAllToFactoryDefaults();
+      refreshModes();
+      setActiveState("custom");
+      setDefaultModeIdState("work");
+      setAutoProfileEnabledState(true);
+      setDisabledAutoProfiles({});
+    },
+    resetBuiltIn: (id: string) => {
+      const orig = resetBuiltInModeToDefault(id);
+      refreshModes();
+      return orig;
+    },
   };
 }
 
@@ -619,4 +632,302 @@ export async function applySettingsToHardware(settings: Settings): Promise<Apply
     console.error("[Hardware] Erro ao aplicar perfil:", err);
     return { appliedCount: 0, warnings: [String(err)] };
   }
+}
+
+export type AocBackupData = {
+  version: 1;
+  app: "AOC Control Studio";
+  exportedAt: string;
+  autoProfileEnabled: boolean;
+  defaultModeId: string;
+  builtinOverrides: Record<string, Settings>;
+  userModes: Mode[];
+  assignedExes: Record<string, string[]>;
+  disabledAutoProfiles: Record<string, boolean>;
+  customSettings?: Settings;
+};
+
+export type AocSingleProfileData = {
+  version: 1;
+  app: "AOC Control Studio";
+  type: "single_profile";
+  exportedAt: string;
+  profile: {
+    id: string;
+    name: string;
+    subtitle?: string;
+    isBuiltIn: boolean;
+    settings: Settings;
+    assignedExes?: string[];
+  };
+};
+
+export async function exportJsonFile(filename: string, data: unknown): Promise<boolean> {
+  const jsonStr = JSON.stringify(data, null, 2);
+  try {
+    const saved = await invoke<boolean>("export_json_dialog", {
+      defaultFilename: filename,
+      contents: jsonStr,
+    });
+    return saved;
+  } catch (err) {
+    console.warn("export_json_dialog indisponível ou falhou, usando fallback do navegador:", err);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return true;
+  }
+}
+
+export function pickAndReadJsonFile<T = unknown>(): Promise<{ filename: string; data: T }> {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) {
+        reject(new Error("Nenhum arquivo selecionado"));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(reader.result as string);
+          resolve({ filename: file.name, data: parsed });
+        } catch {
+          reject(new Error("Arquivo JSON inválido ou corrompido."));
+        }
+      };
+      reader.onerror = () => reject(new Error("Falha ao ler o arquivo."));
+      reader.readAsText(file);
+    };
+    input.click();
+  });
+}
+
+export async function exportSingleProfile(id: string): Promise<boolean> {
+  let mode: Mode | undefined;
+  if (id === "custom") {
+    const customData = loadSettings("custom");
+    mode = {
+      id: "custom",
+      name: "Custom",
+      subtitle: `${customData?.settings.brightness}% brilho · ${customData?.settings.overdrive}`,
+      isBuiltIn: false,
+      settings: customData?.settings || defaultSettings,
+      assignedExes: [],
+    };
+  } else {
+    mode = [...getMergedBuiltIns(), ...getStoredUserModes()].find((m) => m.id === id);
+  }
+  if (!mode) throw new Error("Perfil não encontrado");
+  const assigned = getAssignedExes(id);
+  const data: AocSingleProfileData = {
+    version: 1,
+    app: "AOC Control Studio",
+    type: "single_profile",
+    exportedAt: new Date().toISOString(),
+    profile: {
+      id: mode.id,
+      name: mode.name,
+      subtitle: mode.subtitle,
+      isBuiltIn: Boolean(mode.isBuiltIn),
+      settings: mode.settings,
+      assignedExes: assigned,
+    },
+  };
+  const safeName = mode.name.toLowerCase().replace(/[^a-z0-9_-]/gi, "_");
+  return await exportJsonFile(`aoc-perfil-${safeName}.json`, data);
+}
+
+export async function exportAllConfigurations(): Promise<boolean> {
+  const builtinOverrides = read<Record<string, Settings>>(BUILTIN_OVERRIDES_KEY, {});
+  const userModes = getStoredUserModes();
+  const assignedExes = read<Record<string, string[]>>(ASSIGNED_EXES_KEY, DEFAULT_ASSIGNED_EXES);
+  const disabledAutoProfiles = read<Record<string, boolean>>(DISABLED_AUTO_PROFILES_KEY, {});
+  const defaultModeId = getDefaultModeId();
+  const autoProfileEnabled = getAutoProfileEnabled();
+  const custom = read<RawSettings | null>(CUSTOM_KEY, null);
+
+  const data: AocBackupData = {
+    version: 1,
+    app: "AOC Control Studio",
+    exportedAt: new Date().toISOString(),
+    autoProfileEnabled,
+    defaultModeId,
+    builtinOverrides,
+    userModes,
+    assignedExes,
+    disabledAutoProfiles,
+    customSettings: custom ? normalizeSettings(custom) : defaultSettings,
+  };
+
+  const dateStr = new Date().toISOString().split("T")[0];
+  return await exportJsonFile(`aoc-control-studio-backup-${dateStr}.json`, data);
+}
+
+export function importSingleProfile(profileData: AocSingleProfileData["profile"]): Mode {
+  const isBuiltIn = builtInModes.some((b) => b.id === profileData.id);
+  const cleanSettings = normalizeSettings(profileData.settings as unknown as RawSettings);
+
+  if (isBuiltIn) {
+    const overrides = read<Record<string, Settings>>(BUILTIN_OVERRIDES_KEY, {});
+    overrides[profileData.id] = cleanSettings;
+    localStorage.setItem(BUILTIN_OVERRIDES_KEY, JSON.stringify(overrides));
+    if (profileData.assignedExes) {
+      setAssignedExes(profileData.id, profileData.assignedExes);
+    }
+    syncAutoProfileConfig();
+    return {
+      id: profileData.id,
+      name: profileData.name,
+      subtitle: profileData.subtitle,
+      isBuiltIn: true,
+      settings: cleanSettings,
+      assignedExes: profileData.assignedExes || [],
+    };
+  } else {
+    const userModes = getStoredUserModes();
+    const exists = userModes.some((m) => m.id === profileData.id);
+    const id = exists ? profileData.id : generateId();
+    const newMode: Mode = {
+      id,
+      name: profileData.name || "Modo Importado",
+      subtitle: `${cleanSettings.brightness}% brilho · ${cleanSettings.overdrive}`,
+      isBuiltIn: false,
+      settings: cleanSettings,
+      assignedExes: profileData.assignedExes || [],
+    };
+    const updated = [...userModes.filter((m) => m.id !== id), newMode];
+    localStorage.setItem(KEY, JSON.stringify(updated));
+    if (profileData.assignedExes) {
+      setAssignedExes(id, profileData.assignedExes);
+    }
+    syncAutoProfileConfig();
+    return newMode;
+  }
+}
+
+export function importAllConfigurations(backup: Partial<AocBackupData>) {
+  if (backup.builtinOverrides && typeof backup.builtinOverrides === "object") {
+    const cleanOverrides: Record<string, Settings> = {};
+    for (const [k, v] of Object.entries(backup.builtinOverrides)) {
+      cleanOverrides[k] = normalizeSettings(v as unknown as RawSettings);
+    }
+    localStorage.setItem(BUILTIN_OVERRIDES_KEY, JSON.stringify(cleanOverrides));
+  }
+
+  if (Array.isArray(backup.userModes)) {
+    const cleanUserModes: Mode[] = backup.userModes.map((m) => ({
+      id: String(m.id || generateId()),
+      name: String(m.name || "Modo"),
+      subtitle: typeof m.subtitle === "string" ? m.subtitle : undefined,
+      isBuiltIn: false,
+      settings: normalizeSettings(m.settings as unknown as RawSettings),
+      assignedExes: Array.isArray(m.assignedExes) ? m.assignedExes : [],
+    }));
+    localStorage.setItem(KEY, JSON.stringify(cleanUserModes));
+  }
+
+  if (backup.assignedExes && typeof backup.assignedExes === "object") {
+    localStorage.setItem(ASSIGNED_EXES_KEY, JSON.stringify(backup.assignedExes));
+  }
+
+  if (backup.disabledAutoProfiles && typeof backup.disabledAutoProfiles === "object") {
+    localStorage.setItem(DISABLED_AUTO_PROFILES_KEY, JSON.stringify(backup.disabledAutoProfiles));
+  }
+
+  if (typeof backup.defaultModeId === "string") {
+    localStorage.setItem(DEFAULT_MODE_KEY, JSON.stringify(backup.defaultModeId));
+  }
+
+  if (typeof backup.autoProfileEnabled === "boolean") {
+    localStorage.setItem(AUTO_PROFILE_ENABLED_KEY, JSON.stringify(backup.autoProfileEnabled));
+  }
+
+  if (backup.customSettings) {
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify(normalizeSettings(backup.customSettings as unknown as RawSettings)));
+  }
+
+  syncAutoProfileConfig();
+}
+
+export async function handleFileImport(): Promise<{
+  type: "all" | "single";
+  message: string;
+}> {
+  const { filename, data } = await pickAndReadJsonFile<any>();
+  if (!data || typeof data !== "object") {
+    throw new Error("Arquivo inválido: JSON vazio ou formato incorreto.");
+  }
+
+  // 1. Perfil individual encapsulado
+  if (data.type === "single_profile" && data.profile) {
+    const imported = importSingleProfile(data.profile);
+    return {
+      type: "single",
+      message: `Perfil "${imported.name}" importado com sucesso a partir de ${filename}!`,
+    };
+  }
+
+  // 2. Perfil individual direto
+  if (data.settings && data.name) {
+    const imported = importSingleProfile({
+      id: data.id || generateId(),
+      name: data.name,
+      subtitle: data.subtitle,
+      isBuiltIn: Boolean(data.isBuiltIn),
+      settings: data.settings,
+      assignedExes: data.assignedExes || [],
+    });
+    return {
+      type: "single",
+      message: `Perfil "${imported.name}" importado com sucesso!`,
+    };
+  }
+
+  // 3. Backup completo
+  if (data.builtinOverrides || data.userModes || data.assignedExes || data.app === "AOC Control Studio") {
+    importAllConfigurations(data);
+    const count = (data.userModes?.length || 0) + Object.keys(data.builtinOverrides || {}).length;
+    return {
+      type: "all",
+      message: `Backup completo importado com sucesso! (${count} perfis/modificações restaurados de ${filename}).`,
+    };
+  }
+
+  throw new Error("Estrutura do arquivo JSON não reconhecida como perfil ou backup do AOC Control Studio.");
+}
+
+export function resetBuiltInModeToDefault(id: string): Settings | null {
+  const original = builtInModes.find((b) => b.id === id);
+  if (!original) return null;
+  const overrides = read<Record<string, Settings>>(BUILTIN_OVERRIDES_KEY, {});
+  delete overrides[id];
+  localStorage.setItem(BUILTIN_OVERRIDES_KEY, JSON.stringify(overrides));
+
+  const defaultExes = DEFAULT_ASSIGNED_EXES[id] || [];
+  setAssignedExes(id, defaultExes);
+
+  syncAutoProfileConfig();
+  return original.settings;
+}
+
+export function resetAllToFactoryDefaults() {
+  localStorage.removeItem(KEY);
+  localStorage.removeItem(CUSTOM_KEY);
+  localStorage.removeItem(BUILTIN_OVERRIDES_KEY);
+  localStorage.removeItem(ACTIVE_KEY);
+  localStorage.removeItem(DEFAULT_MODE_KEY);
+  localStorage.removeItem(AUTO_PROFILE_ENABLED_KEY);
+  localStorage.removeItem(ASSIGNED_EXES_KEY);
+  localStorage.removeItem(DISABLED_AUTO_PROFILES_KEY);
+  syncAutoProfileConfig();
 }
