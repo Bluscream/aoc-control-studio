@@ -104,11 +104,20 @@ struct OverdriveVerification {
     next_check: Instant,
 }
 
+#[derive(Debug, Clone)]
+struct ProfileVerification {
+    target: MonitorSettings,
+    check_at: Instant,
+    step: u8,
+    blocking_mode_changed: bool,
+}
+
 pub struct AppState {
     driver: Mutex<Option<DdcDriver>>,
     last_applied: Mutex<Option<MonitorSettings>>,
     auto_config: Mutex<Option<AutoProfileConfig>>,
     overdrive_verifier: Mutex<Option<OverdriveVerification>>,
+    profile_verifier: Mutex<Option<ProfileVerification>>,
 }
 
 fn trigger_overdrive_verification(state: &AppState, target_overdrive: String) {
@@ -128,6 +137,23 @@ fn trigger_overdrive_verification(state: &AppState, target_overdrive: String) {
         attempts: 0,
         max_attempts: 5,
         next_check: Instant::now() + Duration::from_millis(2000),
+    });
+}
+
+fn trigger_profile_verification(state: &AppState, target: MonitorSettings, blocking_mode_changed: bool) {
+    log_msg(
+        "ProfileVerifier",
+        &format!(
+            "Agendando verificação pós-troca (Polling 1 em 2.5s, alterou_bloqueios={})...",
+            blocking_mode_changed
+        ),
+    );
+    let mut guard = state.profile_verifier.lock().unwrap();
+    *guard = Some(ProfileVerification {
+        target,
+        check_at: Instant::now() + Duration::from_millis(2500),
+        step: 1,
+        blocking_mode_changed,
     });
 }
 
@@ -762,6 +788,10 @@ fn apply_changed_settings(
     if current.overdrive != initial.overdrive || current.game_mode != initial.game_mode {
         trigger_overdrive_verification(&state, current.overdrive.clone());
     }
+    let blocking_changed = initial.hdr_mode != current.hdr_mode
+        || initial.game_mode != current.game_mode
+        || initial.eco_mode != current.eco_mode;
+    trigger_profile_verification(&state, current.clone(), blocking_changed);
 
     Ok(res)
 }
@@ -793,7 +823,14 @@ fn apply_monitor_settings(
     drop(last_guard);
     drop(guard);
 
+    let blocking_changed = prev.as_ref().map(|p| {
+        p.hdr_mode != settings.hdr_mode
+            || p.game_mode != settings.game_mode
+            || p.eco_mode != settings.eco_mode
+    }).unwrap_or(true);
+
     trigger_overdrive_verification(&state, settings.overdrive.clone());
+    trigger_profile_verification(&state, settings.clone(), blocking_changed);
 
     Ok(res)
 }
@@ -1373,6 +1410,7 @@ fn start_auto_profile_monitor(app_handle: tauri::AppHandle) {
             drop(guard);
 
             trigger_overdrive_verification(&state, target_settings.overdrive.clone());
+            trigger_profile_verification(&state, target_settings.clone(), blocking_changed);
 
             // Emite evento para que a interface atualize o card selecionado
             let _ = app_handle.emit("auto-profile-changed", target_id);
@@ -1523,12 +1561,151 @@ fn start_overdrive_verifier_loop(app_handle: tauri::AppHandle) {
     });
 }
 
+fn start_profile_verifier_loop(app_handle: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        loop {
+            sleep(Duration::from_millis(250));
+
+            let state = app_handle.state::<AppState>();
+
+            // Verifica se há checagem pendente e se o tempo de 2.5s já passou
+            let check_data = {
+                let mut guard = state.profile_verifier.lock().unwrap();
+                match &*guard {
+                    Some(pv) if Instant::now() >= pv.check_at => {
+                        let t = pv.target.clone();
+                        let step = pv.step;
+                        let blocking = pv.blocking_mode_changed;
+                        *guard = None; // Desliga imediatamente a tarefa atual
+                        Some((t, step, blocking))
+                    }
+                    _ => None,
+                }
+            };
+
+            let (target, step, mut blocking_changed) = match check_data {
+                Some(d) => d,
+                None => continue,
+            };
+
+            log_msg(
+                "ProfileVerifier",
+                &format!(
+                    ">> Executando Polling {} pós-troca de perfil (2.5s após disparo, alterou_bloqueios={})...",
+                    step, blocking_changed
+                ),
+            );
+
+            let mut guard = match state.driver.lock() {
+                Ok(g) => g,
+                Err(_) => continue,
+            };
+
+            let driver = match ensure_driver(&mut guard) {
+                Ok(d) => d,
+                Err(e) => {
+                    log_msg("ProfileVerifier", &format!("Falha ao conectar driver DDC: {}", e));
+                    continue;
+                }
+            };
+
+            // 1. Lê os parâmetros reais gravados no hardware do monitor
+            let live = read_hardware_settings_internal(driver);
+
+            // Se o hardware estiver divergente em HDR, Modo de Jogo ou ECO, confirma alteração de bloqueio
+            if live.hdr_mode != target.hdr_mode
+                || live.game_mode != target.game_mode
+                || live.eco_mode != target.eco_mode
+            {
+                blocking_changed = true;
+            }
+
+            // 2. Se o Overdrive já estiver correto no hardware, encerra o polling de overdrive
+            let mut ov_guard = state.overdrive_verifier.lock().unwrap();
+            if let Some(v) = ov_guard.as_ref() {
+                if map_overdrive_to_hw(&v.target) == map_overdrive_to_hw(&live.overdrive) {
+                    log_msg(
+                        "ProfileVerifier",
+                        "Overdrive já confirmado correto no hardware; polling de overdrive encerrado.",
+                    );
+                    *ov_guard = None;
+                }
+            }
+            drop(ov_guard);
+
+            // 3. Re-aplica apenas o que estiver divergente do perfil alvo
+            let res = apply_diff_internal(driver, &target, Some(&live));
+            if res.applied_count > 0 {
+                log_msg(
+                    "ProfileVerifier",
+                    &format!(
+                        "<< Polling {} pós-troca concluído: corrigidos {} parâmetro(s) divergente(s) no monitor.",
+                        step, res.applied_count
+                    ),
+                );
+                for w in &res.warnings {
+                    log_msg("ProfileVerifier", &format!("  [Aviso] {}", w));
+                }
+            } else {
+                log_msg(
+                    "ProfileVerifier",
+                    &format!(
+                        "<< Polling {} pós-troca concluído: monitor 100% condizente com o perfil alvo.",
+                        step
+                    ),
+                );
+            }
+
+            *state.last_applied.lock().unwrap() = Some(target.clone());
+            drop(guard);
+
+            // 4. Se for o Polling 1 e alguma opção de bloqueio mestre (HDR, Modo de Jogo, Modo ECO)
+            // tiver sido alterada, agenda o Polling 2 em 2.5s para confirmação final dos ajustes destravados
+            if step == 1 && blocking_changed {
+                log_msg(
+                    "ProfileVerifier",
+                    "Opção que bloqueia outras (HDR/Modo de Jogo/ECO) foi alterada. Agendando Polling 2 em 2.5s para garantia...",
+                );
+                let mut guard = state.profile_verifier.lock().unwrap();
+                // Apenas agenda se o usuário não tiver trocado de perfil nesse meio-tempo
+                if guard.is_none() {
+                    *guard = Some(ProfileVerification {
+                        target,
+                        check_at: Instant::now() + Duration::from_millis(2500),
+                        step: 2,
+                        blocking_mode_changed: false,
+                    });
+                }
+            } else {
+                log_msg(
+                    "ProfileVerifier",
+                    &format!("Verificação pós-troca encerrada no Polling {} (sem necessidade de checagens adicionais).", step),
+                );
+            }
+        }
+    });
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    log_msg("Rust", "Inicializando aplicação Tauri...");
+    let initial_driver = DdcDriver::new().ok();
+    log_msg(
+        "Rust",
+        if initial_driver.is_some() {
+            "DdcDriver inicial conectado com sucesso"
+        } else {
+            "DdcDriver inicial não conectado (será tentado sob demanda)"
+        },
+    );
+
     tauri::Builder::default()
         .manage(AppState {
             driver: Mutex::new(initial_driver),
             last_applied: Mutex::new(None),
             auto_config: Mutex::new(None),
             overdrive_verifier: Mutex::new(None),
+            profile_verifier: Mutex::new(None),
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -1542,6 +1719,7 @@ fn start_overdrive_verifier_loop(app_handle: tauri::AppHandle) {
 
             start_auto_profile_monitor(app.handle().clone());
             start_overdrive_verifier_loop(app.handle().clone());
+            start_profile_verifier_loop(app.handle().clone());
 
             let show_item = tauri::menu::MenuItem::with_id(app, "show", "Abrir AOC Control Studio", true, None::<&str>)?;
             let quit_item = tauri::menu::MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
