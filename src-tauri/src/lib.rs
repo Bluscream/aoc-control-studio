@@ -326,19 +326,77 @@ fn apply_diff_internal(
     let hdr_changed = prev.map(|p| p.hdr_mode != target.hdr_mode).unwrap_or(true);
     let target_hdr_val = map_hdr_mode_to_hw(&target.hdr_mode);
 
-    // 0. Se HDR Mode estava ativo e agora está voltando para "Off", desativa o HDR primeiro
-    // para liberar os controles manuais de Brilho, Contraste, Curva de Gamma e Cores
-    if hdr_changed && target_hdr_val == 0 {
-        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_HDR_MODE, 0) {
-            Ok(()) => {
-                applied_count += 1;
-                sleep(Duration::from_millis(100));
+    // =========================================================================
+    // FASE 1: HDR (Master de cor e bloqueio de presets no painel AOC)
+    // =========================================================================
+    // Se o perfil de destino requer HDR desligado (perfil normal / SDR):
+    // Desativa o HDR como primeiro passo para liberar os registradores de
+    // Modo de Jogo, Modo ECO, Curva de Gama, Temperatura de Cor e Contraste.
+    if target_hdr_val == 0 {
+        if hdr_changed {
+            let (_, cur_win_hdr) = driver.get_hdr_status();
+            if cur_win_hdr {
+                let _ = driver.set_hdr(false);
+                sleep(Duration::from_millis(150));
             }
-            Err(e) => warnings.push(format!("HDR Mode (Off): {}", e)),
+
+            match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_HDR_MODE, 0) {
+                Ok(()) => {
+                    applied_count += 1;
+                    // Aguarda o controlador do monitor chavear o pipeline de imagem de HDR para SDR
+                    sleep(Duration::from_millis(250));
+                }
+                Err(e) => warnings.push(format!("HDR Mode (Off): {}", e)),
+            }
+        }
+    } else {
+        // O perfil de destino requer um modo HDR (Picture, Movie, Game).
+        // No AOC 24G2S, qualquer Modo de Jogo ativo bloqueia a ativação do HDR.
+        // Portanto, se algum Modo de Jogo estava ativo, desliga-o primeiro.
+        if prev.map(|p| p.game_mode != "Desligado").unwrap_or(true) {
+            let _ = driver.set_vcp(vcp::GAME_MODE, 0);
+            sleep(Duration::from_millis(100));
+        }
+
+        if hdr_changed {
+            let (_, cur_win_hdr) = driver.get_hdr_status();
+            if cur_win_hdr {
+                let _ = driver.set_hdr(false);
+                sleep(Duration::from_millis(150));
+            }
+
+            match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_HDR_MODE, target_hdr_val) {
+                Ok(()) => {
+                    applied_count += 1;
+                    sleep(Duration::from_millis(250));
+                }
+                Err(e) => warnings.push(format!("HDR Mode: {}", e)),
+            }
         }
     }
 
-    // 1. Se DCR ou Modo ECO estavam travando controles manuais e foram desativados, destrava primeiro
+    // =========================================================================
+    // FASE 2: Modo de Jogo AOC (0xDC)
+    // =========================================================================
+    // Aplica o Modo de Jogo antes dos controles finos. Se o HDR estiver ativo,
+    // o Modo de Jogo é ignorado pelo hardware, portanto só aplica se HDR for Off.
+    if target_hdr_val == 0 && gm_changed {
+        let gm_val = map_game_mode_to_hw(&target.game_mode);
+        match driver.set_vcp(vcp::GAME_MODE, gm_val) {
+            Ok(()) => {
+                applied_count += 1;
+                sleep(Duration::from_millis(150));
+            }
+            Err(e) => warnings.push(format!("Modo de Jogo: {}", e)),
+        }
+    }
+
+    // =========================================================================
+    // FASE 3: Modo ECO e DCR (Contraste Dinâmico)
+    // =========================================================================
+    let is_gm_active = target_hdr_val == 0 && target.game_mode != "Desligado";
+
+    // Se DCR está desligado no perfil, desliga primeiro para liberar brilho/contraste
     if dcr_changed && !target.dcr {
         match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_DCR, 0) {
             Ok(()) => applied_count += 1,
@@ -346,26 +404,28 @@ fn apply_diff_internal(
         }
     }
 
-    if eco_changed && map_eco_to_hw(&target.eco_mode) == 0 {
-        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_ECO_MODE, 0) {
+    // Aplica Modo ECO (se ECO for Padrão, destrava brilho/contraste; se for outro, aplica)
+    if eco_changed {
+        let eco_val = map_eco_to_hw(&target.eco_mode);
+        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_ECO_MODE, eco_val) {
             Ok(()) => applied_count += 1,
             Err(e) => warnings.push(format!("Modo ECO: {}", e)),
         }
     }
 
-    // 2. Modo de Jogo AOC (0xDC) — aplica antes dos ajustes finos para não sobrescrevê-los
-    if gm_changed {
-        let gm_val = map_game_mode_to_hw(&target.game_mode);
-        match driver.set_vcp(vcp::GAME_MODE, gm_val) {
-            Ok(()) => {
-                applied_count += 1;
-                sleep(Duration::from_millis(140));
-            }
-            Err(e) => warnings.push(format!("Modo de Jogo: {}", e)),
+    // Se DCR estiver ligado no perfil, ativa-o (apenas se Modo de Jogo não estiver ativo)
+    if dcr_changed && target.dcr && !is_gm_active {
+        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_DCR, 1) {
+            Ok(()) => applied_count += 1,
+            Err(e) => warnings.push(format!("DCR: {}", e)),
         }
     }
 
-    // 3. Brilho, Contraste e Curva de Gamma (Gamma 1/2/3 via F8 E1 12)
+    // =========================================================================
+    // FASE 4: Restante do perfil (Controles finos de imagem e hardware)
+    // =========================================================================
+
+    // 4.1 Brilho (0x10)
     if prev
         .map(|p| p.brightness != target.brightness)
         .unwrap_or(true)
@@ -376,38 +436,28 @@ fn apply_diff_internal(
         }
     }
 
-    if prev.map(|p| p.contrast != target.contrast).unwrap_or(true) {
-        match driver.set_vcp(vcp::CONTRAST, target.contrast.min(100)) {
-            Ok(()) => applied_count += 1,
-            Err(e) => warnings.push(format!("Contraste: {}", e)),
+    // 4.2 Contraste (0x12) - apenas se não bloqueado por Modo de Jogo ou HDR
+    if !is_gm_active && target_hdr_val == 0 {
+        if prev.map(|p| p.contrast != target.contrast).unwrap_or(true) {
+            match driver.set_vcp(vcp::CONTRAST, target.contrast.min(100)) {
+                Ok(()) => applied_count += 1,
+                Err(e) => warnings.push(format!("Contraste: {}", e)),
+            }
         }
     }
 
-    if prev.map(|p| p.gamma != target.gamma).unwrap_or(true) {
-        let gamma_val = map_gamma_to_hw(&target.gamma);
-        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_GAMMA, gamma_val) {
-            Ok(()) => applied_count += 1,
-            Err(e) => warnings.push(format!("Gamma: {}", e)),
+    // 4.3 Curva de Gamma (F8 E1 12) - apenas se não bloqueado por Modo de Jogo ou HDR
+    if !is_gm_active && target_hdr_val == 0 {
+        if prev.map(|p| p.gamma != target.gamma).unwrap_or(true) {
+            let gamma_val = map_gamma_to_hw(&target.gamma);
+            match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_GAMMA, gamma_val) {
+                Ok(()) => applied_count += 1,
+                Err(e) => warnings.push(format!("Gamma: {}", e)),
+            }
         }
     }
 
-    // 4. Caso Modo ECO seja diferente de Padrão ou DCR tenha sido ligado, aplica após brilho/contraste
-    if eco_changed && map_eco_to_hw(&target.eco_mode) != 0 {
-        let eco_val = map_eco_to_hw(&target.eco_mode);
-        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_ECO_MODE, eco_val) {
-            Ok(()) => applied_count += 1,
-            Err(e) => warnings.push(format!("Modo ECO: {}", e)),
-        }
-    }
-
-    if dcr_changed && target.dcr {
-        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_DCR, 1) {
-            Ok(()) => applied_count += 1,
-            Err(e) => warnings.push(format!("DCR: {}", e)),
-        }
-    }
-
-    // 5. Temperatura de Cor e Ganhos RGB (desativados pelo hardware quando HDR está ativo)
+    // 4.4 Temperatura de Cor e Ganhos RGB (desativados quando HDR está ativo)
     if target_hdr_val == 0 {
         let color_temp_changed = prev
             .map(|p| p.color_temp != target.color_temp)
@@ -436,28 +486,47 @@ fn apply_diff_internal(
         }
     }
 
-    // 6. Low Blue Light (F8 E1 59: 0..4)
-    if prev.map(|p| p.low_blue != target.low_blue).unwrap_or(true) {
-        let lb_val = map_low_blue_to_hw(&target.low_blue);
-        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_LOW_BLUE, lb_val) {
-            Ok(()) => applied_count += 1,
-            Err(e) => warnings.push(format!("Low Blue Light: {}", e)),
+    // 4.5 Low Blue Light (F8 E1 59: 0..4) - desativado em HDR
+    if target_hdr_val == 0 {
+        if prev.map(|p| p.low_blue != target.low_blue).unwrap_or(true) {
+            let lb_val = map_low_blue_to_hw(&target.low_blue);
+            match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_LOW_BLUE, lb_val) {
+                Ok(()) => applied_count += 1,
+                Err(e) => warnings.push(format!("Low Blue Light: {}", e)),
+            }
         }
     }
 
-    // 7. Game Color (F8 E1 57: 0..20)
-    if prev
-        .map(|p| p.game_color != target.game_color)
-        .unwrap_or(true)
-    {
-        let gc_val = target.game_color.min(20);
-        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_GAME_COLOR, gc_val) {
-            Ok(()) => applied_count += 1,
-            Err(e) => warnings.push(format!("Game Color: {}", e)),
+    // 4.6 Game Color (F8 E1 57: 0..20) - bloqueado em HDR e em presets FPS/RTS/Corrida
+    let is_preset_game_mode = matches!(target.game_mode.as_str(), "FPS" | "RTS" | "Corrida");
+    if target_hdr_val == 0 && !is_preset_game_mode {
+        if prev
+            .map(|p| p.game_color != target.game_color)
+            .unwrap_or(true)
+        {
+            let gc_val = target.game_color.min(20);
+            match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_GAME_COLOR, gc_val) {
+                Ok(()) => applied_count += 1,
+                Err(e) => warnings.push(format!("Game Color: {}", e)),
+            }
         }
     }
 
-    // 8. Overdrive (F8 E1 51: 0..4)
+    // 4.7 Shadow Control (F8 E1 58: 0..100 em passos de 10) - bloqueado em HDR e presets
+    if target_hdr_val == 0 && !is_preset_game_mode {
+        if prev
+            .map(|p| p.shadow_control != target.shadow_control)
+            .unwrap_or(true)
+        {
+            let sc_val = (((target.shadow_control + 5) / 10) * 10).min(100);
+            match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_SHADOW_CONTROL, sc_val) {
+                Ok(()) => applied_count += 1,
+                Err(e) => warnings.push(format!("Shadow Control: {}", e)),
+            }
+        }
+    }
+
+    // 4.8 Overdrive (F8 E1 51: 0..4) - funciona sempre em qualquer modo
     if prev
         .map(|p| p.overdrive != target.overdrive)
         .unwrap_or(true)
@@ -469,19 +538,7 @@ fn apply_diff_internal(
         }
     }
 
-    // 9. Shadow Control (F8 E1 58: 0..100 em passos de 10)
-    if prev
-        .map(|p| p.shadow_control != target.shadow_control)
-        .unwrap_or(true)
-    {
-        let sc_val = (((target.shadow_control + 5) / 10) * 10).min(100);
-        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_SHADOW_CONTROL, sc_val) {
-            Ok(()) => applied_count += 1,
-            Err(e) => warnings.push(format!("Shadow Control: {}", e)),
-        }
-    }
-
-    // 10. Mira na Tela / Dial Point (F8 E1 5A: 0..1)
+    // 4.9 Mira na Tela / Dial Point (F8 E1 5A: 0..1)
     if prev
         .map(|p| p.crosshair != target.crosshair)
         .unwrap_or(true)
@@ -493,7 +550,7 @@ fn apply_diff_internal(
         }
     }
 
-    // 11. Frame Counter (F8 E1 5B: 0..4)
+    // 4.10 Frame Counter (F8 E1 5B: 0..4)
     if prev
         .map(|p| p.frame_counter != target.frame_counter)
         .unwrap_or(true)
@@ -505,7 +562,7 @@ fn apply_diff_internal(
         }
     }
 
-    // 12. Adaptive-Sync / AMD FreeSync (via ADLX)
+    // 4.11 Adaptive-Sync / AMD FreeSync (via ADLX)
     if prev
         .map(|p| p.adaptive_sync != target.adaptive_sync)
         .unwrap_or(false)
@@ -515,7 +572,6 @@ fn apply_diff_internal(
             Err(e) => warnings.push(e),
         }
     } else if prev.is_none() {
-        // Na ativação de um card de Modo completo, aplica FreeSync silenciosamente se suportado
         let (sup, _) = driver.get_adaptive_sync_status();
         if sup {
             let _ = driver.set_adaptive_sync(target.adaptive_sync);
@@ -525,22 +581,6 @@ fn apply_diff_internal(
                 "Ative 'Adaptive-Sync' uma única vez nos botões físicos do monitor (Config. Jogo → Adaptive-Sync) para alternar FreeSync pelo app."
                     .to_string(),
             );
-        }
-    }
-
-    // 13. Perfil de Imagem HDR do AOC 24G2S (F8 E1 52: 1: HDR Picture, 2: HDR Movie, 3: HDR Game)
-    // Se o usuário selecionou um modo HDR diferente de Off, aplica após os demais ajustes
-    if hdr_changed && target_hdr_val != 0 {
-        // Se o Windows estivesse com HDR10 ativo por engano, desliga para manter o sinal SDR limpo
-        let (_, cur_win_hdr) = driver.get_hdr_status();
-        if cur_win_hdr {
-            let _ = driver.set_hdr(false);
-            sleep(Duration::from_millis(150));
-        }
-
-        match driver.set_tpv_vcp(vcp::TPV_F8, vcp::TPV_E1, vcp::EXT_HDR_MODE, target_hdr_val) {
-            Ok(()) => applied_count += 1,
-            Err(e) => warnings.push(format!("HDR Mode: {}", e)),
         }
     }
 
@@ -720,7 +760,7 @@ fn apply_changed_settings(
     drop(guard);
 
     if current.overdrive != initial.overdrive || current.game_mode != initial.game_mode {
-        trigger_overdrive_verification(&state, current.overdrive);
+        trigger_overdrive_verification(&state, current.overdrive.clone());
     }
 
     Ok(res)
@@ -753,7 +793,7 @@ fn apply_monitor_settings(
     drop(last_guard);
     drop(guard);
 
-    trigger_overdrive_verification(&state, settings.overdrive);
+    trigger_overdrive_verification(&state, settings.overdrive.clone());
 
     Ok(res)
 }
@@ -1300,14 +1340,39 @@ fn start_auto_profile_monitor(app_handle: tauri::AppHandle) {
                 Ok(g) => g,
                 Err(_) => continue,
             };
+            let mut blocking_changed = true;
             if let Ok(driver) = ensure_driver(&mut guard) {
-                let prev = state.last_applied.lock().unwrap().clone();
-                let _ = apply_diff_internal(driver, &target_settings, prev.as_ref());
+                let prev = {
+                    let mut last_guard = state.last_applied.lock().unwrap();
+                    if last_guard.is_none() {
+                        log_msg("AutoProfile", "Lendo estado inicial do monitor...");
+                        *last_guard = Some(read_hardware_settings_internal(driver));
+                    }
+                    last_guard.clone()
+                };
+
+                blocking_changed = prev.as_ref().map(|p| {
+                    p.hdr_mode != target_settings.hdr_mode
+                        || p.game_mode != target_settings.game_mode
+                        || p.eco_mode != target_settings.eco_mode
+                }).unwrap_or(true);
+
+                let res = apply_diff_internal(driver, &target_settings, prev.as_ref());
+                log_msg(
+                    "AutoProfile",
+                    &format!(
+                        "Perfil '{}' aplicado: {} comandos, {} avisos",
+                        target_id, res.applied_count, res.warnings.len()
+                    ),
+                );
+                for w in &res.warnings {
+                    log_msg("AutoProfile", &format!("  [Aviso] {}", w));
+                }
                 *state.last_applied.lock().unwrap() = Some(target_settings.clone());
             }
             drop(guard);
 
-            trigger_overdrive_verification(&state, target_settings.overdrive);
+            trigger_overdrive_verification(&state, target_settings.overdrive.clone());
 
             // Emite evento para que a interface atualize o card selecionado
             let _ = app_handle.emit("auto-profile-changed", target_id);
@@ -1457,19 +1522,6 @@ fn start_overdrive_verifier_loop(app_handle: tauri::AppHandle) {
         }
     });
 }
-
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    log_msg("Rust", "Inicializando aplicação Tauri...");
-    let initial_driver = DdcDriver::new().ok();
-    log_msg(
-        "Rust",
-        if initial_driver.is_some() {
-            "DdcDriver inicial conectado com sucesso"
-        } else {
-            "DdcDriver inicial não conectado (será tentado sob demanda)"
-        },
-    );
 
     tauri::Builder::default()
         .manage(AppState {
