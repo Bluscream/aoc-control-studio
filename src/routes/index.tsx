@@ -40,12 +40,22 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Modos do monitor — AOC Control Studio" },
-      { name: "description", content: "Escolha ou crie modos de imagem para o seu monitor AOC 24G2S." },
+      {
+        name: "description",
+        content: "Escolha ou crie modos de imagem para o seu monitor AOC 24G2S.",
+      },
     ],
   }),
   component: Index,
@@ -128,7 +138,9 @@ function Index() {
       if (selectedExportProfile === "all") {
         const saved = await exportAllConfigurations();
         if (saved) {
-          setFeedbackMsg({ text: "Backup completo com todas as configurações exportado com sucesso!" });
+          setFeedbackMsg({
+            text: "Backup completo com todas as configurações exportado com sucesso!",
+          });
           setTimeout(() => setFeedbackMsg(null), 4000);
         }
       } else {
@@ -168,15 +180,18 @@ function Index() {
     resetAll();
     setShowConfirmReset(false);
     setShowBackupDialog(false);
-    setFeedbackMsg({ text: "Todas as configurações e perfis foram restaurados aos padrões originais de fábrica!" });
+    setFeedbackMsg({
+      text: "Todas as configurações e perfis foram restaurados aos padrões originais de fábrica!",
+    });
     setTimeout(() => setFeedbackMsg(null), 5000);
   };
 
   const defaultModeName =
-    modes.find((m) => m.id === defaultModeId)?.name || (defaultModeId === "custom" ? "Custom" : "Padrão");
+    modes.find((m) => m.id === defaultModeId)?.name ||
+    (defaultModeId === "custom" ? "Custom" : "Padrão");
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-14">
+    <main className="mx-auto max-w-3xl sm:max-w-4xl px-4 sm:px-6 py-10 sm:py-14 min-w-0">
       {/* Header com dados reais do monitor */}
       <header className="mb-8 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -197,7 +212,7 @@ function Index() {
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              {monInfo?.name || "AOC 24G2S"} · {monInfo?.connection || "DisplayPort"} · AMD Radeon I2C
+              {monInfo?.name || "AOC Monitor"} · {monInfo?.connection || "DisplayPort"} · DDC/CI I2C
             </p>
           </div>
         </div>
@@ -208,7 +223,7 @@ function Index() {
             setShowConfirmReset(false);
             setShowBackupDialog(true);
           }}
-          className="flex items-center gap-2 rounded-xl border border-border/80 bg-secondary/80 px-3.5 py-2 text-xs font-medium text-muted-foreground transition hover:border-foreground/40 hover:text-foreground hover:bg-secondary cursor-pointer shadow-sm"
+          className="flex items-center gap-2 rounded-xl border border-border/80 bg-secondary/80 px-3.5 py-2 text-xs font-medium text-muted-foreground transition hover:border-foreground/40 hover:text-foreground hover:bg-secondary cursor-pointer shadow-sm shrink-0"
           title="Exportar/Importar perfis e gerenciar configurações"
         >
           <FolderArchive className="h-4 w-4 text-primary" />
@@ -217,11 +232,13 @@ function Index() {
       </header>
 
       {/* Painel de Automação de Perfil por Aplicativo */}
-      <div className="mb-8 rounded-2xl border border-border/70 bg-secondary/30 p-4 backdrop-blur-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="space-y-1">
+      <div className="mb-8 rounded-2xl border border-border/70 bg-secondary/30 p-4 backdrop-blur-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 min-w-0">
+        <div className="space-y-1 min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold text-foreground">Troca Automática por Aplicativo</span>
+            <span className="text-sm font-semibold text-foreground">
+              Troca Automática por Aplicativo
+            </span>
             <span
               className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
                 autoProfileEnabled
@@ -233,11 +250,12 @@ function Index() {
             </span>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Ao focar em um jogo ou executável vinculado, o monitor troca automaticamente para o perfil correspondente.
-            Na Área de Trabalho, ele retorna para o padrão:{" "}
+            Ao focar em um jogo ou executável vinculado, o monitor troca automaticamente para o
+            perfil correspondente. Na Área de Trabalho, ele retorna para o padrão:{" "}
             <span className="font-semibold text-foreground underline decoration-primary/50 underline-offset-2">
               {defaultModeName}
-            </span>.
+            </span>
+            .
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
@@ -251,7 +269,9 @@ function Index() {
           >
             <span
               className={`pointer-events-none inline-block h-5 w-5 transform rounded-full shadow-lg ring-0 transition duration-200 ease-in-out ${
-                autoProfileEnabled ? "translate-x-5 bg-primary-foreground" : "translate-x-0 bg-foreground"
+                autoProfileEnabled
+                  ? "translate-x-5 bg-primary-foreground"
+                  : "translate-x-0 bg-foreground"
               }`}
             />
           </button>
@@ -262,31 +282,32 @@ function Index() {
         <div>
           <h2 className="mb-1 text-2xl font-semibold tracking-tight">Modos de Imagem</h2>
           <p className="text-sm text-muted-foreground">
-            Clique no card para ativar, na estrela para torná-lo o padrão do sistema, ou no lápis para vincular executáveis.
+            Clique no card para ativar, na estrela para torná-lo o padrão do sistema, ou no lápis
+            para vincular executáveis.
           </p>
         </div>
       </div>
 
       {feedbackMsg && (
         <div
-          className={`mb-6 flex items-start justify-between gap-3 rounded-xl border p-4 text-xs transition-all shadow-sm ${
+          className={`mb-6 flex items-start justify-between gap-3 rounded-xl border p-4 text-xs transition-all shadow-sm min-w-0 w-full overflow-hidden ${
             feedbackMsg.isError
               ? "border-red-500/30 bg-red-500/10 text-red-200"
               : "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
           }`}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2 min-w-0 flex-1">
             {feedbackMsg.isError ? (
-              <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-400 mt-0.5" />
             ) : (
-              <Check className="h-4 w-4 shrink-0 text-emerald-400 stroke-[3]" />
+              <Check className="h-4 w-4 shrink-0 text-emerald-400 stroke-[3] mt-0.5" />
             )}
-            <span>{feedbackMsg.text}</span>
+            <span className="break-words min-w-0 flex-1">{feedbackMsg.text}</span>
           </div>
           <button
             type="button"
             onClick={() => setFeedbackMsg(null)}
-            className="rounded-lg p-1 text-muted-foreground hover:text-foreground transition cursor-pointer"
+            className="rounded-lg p-1 text-muted-foreground hover:text-foreground transition cursor-pointer shrink-0"
             aria-label="Fechar mensagem"
           >
             <X className="h-4 w-4" />
@@ -295,18 +316,18 @@ function Index() {
       )}
 
       {lastWarnings.length > 0 && (
-        <div className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
-          <div className="space-y-1">
+        <div className="mb-6 flex items-start justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200 min-w-0 w-full overflow-hidden">
+          <div className="space-y-1 min-w-0 flex-1">
             {lastWarnings.map((w, i) => (
-              <div key={i} className="flex items-start gap-2">
+              <div key={i} className="flex items-start gap-2 min-w-0">
                 <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
-                <span>{w}</span>
+                <span className="break-words min-w-0 flex-1">{w}</span>
               </div>
             ))}
           </div>
           <button
             onClick={clearWarnings}
-            className="rounded-lg p-1 text-amber-300/70 hover:text-amber-100 transition cursor-pointer"
+            className="rounded-lg p-1 text-amber-300/70 hover:text-amber-100 transition cursor-pointer shrink-0"
             aria-label="Fechar aviso"
           >
             <X className="h-4 w-4" />
@@ -377,45 +398,63 @@ function Index() {
 
       {/* Modal de Backup, Exportação, Importação e Restauração */}
       <Dialog open={showBackupDialog} onOpenChange={setShowBackupDialog}>
-        <DialogContent className="max-w-md border-border/80 bg-background/95 backdrop-blur-xl">
-          <DialogHeader>
+        <DialogContent className="max-w-lg w-[94vw] sm:w-full border-border/80 bg-background/95 backdrop-blur-xl p-4 sm:p-6 max-h-[85vh] overflow-y-auto overflow-x-hidden rounded-2xl shadow-2xl">
+          <DialogHeader className="space-y-1 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-semibold">
-              <FolderArchive className="h-5 w-5 text-primary" />
+              <FolderArchive className="h-5 w-5 text-primary shrink-0" />
               <span>Backup e Gerenciamento de Perfis</span>
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
               Exporte, importe ou restaure as configurações e modos de imagem em arquivos JSON.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 pt-2">
+          <div className="space-y-3.5 pt-1">
             {/* 1. Exportação */}
-            <div className="rounded-xl border border-border/70 bg-secondary/40 p-3.5 space-y-3">
+            <div className="rounded-xl border border-border/70 bg-secondary/40 p-3 sm:p-3.5 space-y-2.5">
               <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                <Download className="h-4 w-4 text-primary" />
+                <Download className="h-3.5 w-3.5 text-primary shrink-0" />
                 <span>Exportar Configurações (JSON)</span>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Gere um arquivo JSON com todas as configurações do aplicativo ou selecione apenas um perfil específico.
+                Gere um arquivo JSON com todas as configurações do aplicativo ou selecione apenas um
+                perfil específico.
               </p>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <select
-                  value={selectedExportProfile}
-                  onChange={(e) => setSelectedExportProfile(e.target.value)}
-                  className="flex-1 rounded-lg border border-border/70 bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary cursor-pointer"
-                >
-                  <option value="all">★ Todas as configurações (Backup Completo)</option>
-                  <option value="custom">Custom (Ajuste livre)</option>
-                  {modes.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} {m.isBuiltIn ? "(Padrão AOC)" : "(Personalizado)"}
-                    </option>
-                  ))}
-                </select>
+              <div className="flex items-center gap-2 min-w-0 w-full">
+                <div className="flex-1 min-w-0">
+                  <Select
+                    value={selectedExportProfile}
+                    onValueChange={(val) => setSelectedExportProfile(val)}
+                  >
+                    <SelectTrigger className="w-full h-8 rounded-lg border border-border/80 bg-background/90 px-2.5 py-1 text-xs text-foreground cursor-pointer focus:ring-1 focus:ring-primary min-w-0 overflow-hidden">
+                      <SelectValue
+                        placeholder="Selecione um perfil..."
+                        className="truncate block min-w-0"
+                      />
+                    </SelectTrigger>
+                    <SelectContent className="border border-border/80 bg-popover text-popover-foreground z-[100] max-h-56">
+                      <SelectItem value="all" className="text-xs py-1.5 cursor-pointer">
+                        ★ Todas as configurações (Backup Completo)
+                      </SelectItem>
+                      <SelectItem value="custom" className="text-xs py-1.5 cursor-pointer">
+                        Custom (Ajuste livre)
+                      </SelectItem>
+                      {modes.map((m) => (
+                        <SelectItem
+                          key={m.id}
+                          value={m.id}
+                          className="text-xs py-1.5 cursor-pointer"
+                        >
+                          {m.name} {m.isBuiltIn ? "(Padrão AOC)" : "(Personalizado)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <button
                   type="button"
                   onClick={handleExport}
-                  className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 transition cursor-pointer shrink-0"
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 transition cursor-pointer shrink-0 h-8 shadow-sm"
                 >
                   <Download className="h-3.5 w-3.5" />
                   <span>Exportar</span>
@@ -424,48 +463,52 @@ function Index() {
             </div>
 
             {/* 2. Importação */}
-            <div className="rounded-xl border border-border/70 bg-secondary/40 p-3.5 space-y-3">
+            <div className="rounded-xl border border-border/70 bg-secondary/40 p-3 sm:p-3.5 space-y-2.5">
               <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                <Upload className="h-4 w-4 text-emerald-400" />
+                <Upload className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
                 <span>Importar Arquivo JSON</span>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Selecione um arquivo .json para restaurar um backup completo ou importar um perfil individual. O sistema detecta o formato automaticamente.
+                Selecione um arquivo .json para restaurar um backup completo ou importar um perfil
+                individual. O sistema detecta o formato automaticamente.
               </p>
               <button
                 type="button"
                 onClick={handleImport}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border/80 bg-background/80 hover:bg-background px-3 py-2 text-xs font-medium text-foreground transition cursor-pointer hover:border-emerald-500/40"
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-border/80 bg-background/80 hover:bg-background px-3 py-1.5 text-xs font-medium text-foreground transition cursor-pointer hover:border-emerald-500/40 h-8 shadow-sm"
               >
-                <FileJson className="h-4 w-4 text-emerald-400" />
-                <span>Selecionar Arquivo JSON (.json)...</span>
+                <FileJson className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                <span className="truncate">Selecionar Arquivo JSON (.json)...</span>
               </button>
             </div>
 
             {/* 3. Limpar Tudo / Restaurar de Fábrica */}
-            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3.5 space-y-2">
+            <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 sm:p-3.5 space-y-2.5">
               <div className="flex items-center gap-2 text-xs font-semibold text-red-400">
-                <RotateCcw className="h-4 w-4" />
+                <RotateCcw className="h-3.5 w-3.5 shrink-0" />
                 <span>Restaurar Configurações de Fábrica</span>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Apaga todos os perfis personalizados e desfaz quaisquer edições feitas nos perfis padrão da AOC, retornando o app ao estado de recém-instalado.
+                Apaga todos os perfis personalizados e desfaz quaisquer edições feitas nos perfis
+                padrão da AOC, retornando o app ao estado de recém-instalado.
               </p>
               {showConfirmReset ? (
-                <div className="pt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-red-500/20 pt-2">
-                  <span className="text-[11px] font-medium text-amber-300">Tem certeza absoluta?</span>
-                  <div className="flex items-center gap-2">
+                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-red-500/20">
+                  <span className="text-[11px] font-medium text-amber-300">
+                    Tem certeza absoluta?
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => setShowConfirmReset(false)}
-                      className="px-2.5 py-1 text-xs rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground cursor-pointer"
+                      className="px-2.5 py-1 text-[11px] rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground cursor-pointer h-7"
                     >
                       Cancelar
                     </button>
                     <button
                       type="button"
                       onClick={handleResetAll}
-                      className="px-2.5 py-1 text-xs rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition cursor-pointer shadow-sm"
+                      className="px-2.5 py-1 text-[11px] rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition cursor-pointer shadow-sm h-7"
                     >
                       Sim, Limpar Tudo
                     </button>
@@ -475,7 +518,7 @@ function Index() {
                 <button
                   type="button"
                   onClick={() => setShowConfirmReset(true)}
-                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 underline underline-offset-2 pt-1 cursor-pointer"
+                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 underline underline-offset-2 pt-0.5 cursor-pointer"
                 >
                   <span>Limpar dados e restaurar padrões</span>
                 </button>
@@ -521,10 +564,8 @@ function ModeCard({
 }) {
   return (
     <div
-      className={`panel group relative flex aspect-square flex-col p-4 transition-all ${
-        active
-          ? "bg-accent/80 ring-1 ring-foreground/20 shadow-glow"
-          : "hover:bg-secondary/70"
+      className={`panel group relative flex min-h-[170px] aspect-square flex-col p-4 transition-all min-w-0 ${
+        active ? "bg-accent/80 ring-1 ring-foreground/20 shadow-glow" : "hover:bg-secondary/70"
       }`}
     >
       <button
@@ -567,10 +608,7 @@ function ModeCard({
           </div>
 
           {onToggleAutoSwitch && (
-            <div
-              className="flex items-center pt-0.5"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div className="flex items-center pt-0.5" onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
                 onClick={(e) => {
@@ -601,7 +639,9 @@ function ModeCard({
                 >
                   <span
                     className={`pointer-events-none inline-block h-2 w-2 transform rounded-full shadow transition duration-200 ease-in-out mt-[1px] ${
-                      autoSwitchEnabled ? "translate-x-2 bg-primary-foreground" : "translate-x-0.5 bg-foreground"
+                      autoSwitchEnabled
+                        ? "translate-x-2 bg-primary-foreground"
+                        : "translate-x-0.5 bg-foreground"
                     }`}
                   />
                 </span>
@@ -611,7 +651,7 @@ function ModeCard({
         </div>
       </div>
 
-      <div className="pointer-events-none mt-auto">
+      <div className="pointer-events-none mt-auto min-w-0 w-full">
         <p className="truncate text-sm font-semibold tracking-tight">{name}</p>
         <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
         {assignedExes.length > 0 && (
@@ -630,9 +670,7 @@ function ModeCard({
               {assignedExes.length > 2 ? ` +${assignedExes.length - 2}` : ""}
             </span>
             {!autoSwitchEnabled && (
-              <span className="text-[9px] text-amber-400/90 font-medium ml-1">
-                (pausado)
-              </span>
+              <span className="text-[9px] text-amber-400/90 font-medium ml-1">(pausado)</span>
             )}
           </div>
         )}

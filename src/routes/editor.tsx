@@ -197,10 +197,10 @@ function Editor() {
   const isHdrModeActive = s.hdrMode !== "Off";
   const isEcoModeActive = s.ecoMode !== "Padrão";
 
-  const gameModeBlockReason = `Bloqueado pelo Modo de Jogo AOC (${s.gameMode})`;
-  const hdrModeBlockReason = `Bloqueado pelo Modo HDR (${s.hdrMode})`;
-  const ecoModeBlockReason = `Bloqueado pelo Modo ECO (${s.ecoMode})`;
-  const dcrBlockReason = "Bloqueado pelo DCR (Contraste Dinâmico)";
+  const gameModeBlockReason = `Bloqueado (Modo de Jogo - ${s.gameMode})`;
+  const hdrModeBlockReason = `Bloqueado (HDR - ${s.hdrMode})`;
+  const ecoModeBlockReason = `Bloqueado (Modo ECO - ${s.ecoMode})`;
+  const dcrBlockReason = "Bloqueado (DCR Ativo)";
 
   const manualLumLocked = !isGameModeActive && !isEcoModeActive && s.dcr;
 
@@ -221,7 +221,7 @@ function Editor() {
   };
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12 pb-28">
+    <main className="mx-auto max-w-3xl sm:max-w-4xl px-4 sm:px-6 py-8 sm:py-12 pb-28 min-w-0">
       <Link
         to="/"
         className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
@@ -252,13 +252,13 @@ function Editor() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 shrink-0 w-full sm:w-auto">
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto">
           {isBuiltIn && (
             <button
               type="button"
               onClick={handleResetToDefault}
               title="Restaurar este perfil para as configurações originais de fábrica da AOC"
-              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-secondary text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 border border-amber-500/20 transition cursor-pointer"
+              className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-medium bg-secondary text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 border border-amber-500/20 transition cursor-pointer h-9 sm:h-10"
             >
               <RotateCcw className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">Restaurar Padrão</span>
@@ -276,7 +276,7 @@ function Editor() {
               }
             }}
             title="Escolher onde salvar as configurações deste perfil em arquivo JSON"
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition cursor-pointer h-9 sm:h-10"
           >
             <Download className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">Exportar JSON</span>
@@ -287,7 +287,7 @@ function Editor() {
             onClick={handleReadFromMonitor}
             disabled={readingHw || saving}
             title="Carregar os valores que estão ativos agora no monitor"
-            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition cursor-pointer h-9 sm:h-10"
           >
             <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${readingHw ? "animate-spin" : ""}`} />
             <span className="truncate">{readingHw ? "Lendo..." : "Ler do Monitor"}</span>
@@ -297,7 +297,7 @@ function Editor() {
             type="button"
             onClick={handleSave}
             disabled={saving || !hasChanges}
-            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition shadow-sm ${
+            className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-medium transition shadow-sm h-9 sm:h-10 ${
               !isBuiltIn ? "col-span-2" : ""
             } ${
               savedSuccess
@@ -328,11 +328,11 @@ function Editor() {
       </div>
 
       {warnings.length > 0 && (
-        <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200 space-y-1">
+        <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200 space-y-1 min-w-0 w-full overflow-hidden">
           {warnings.map((w, idx) => (
-            <div key={idx} className="flex items-start gap-2">
+            <div key={idx} className="flex items-start gap-2 min-w-0">
               <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
-              <span>{w}</span>
+              <span className="break-words min-w-0 flex-1">{w}</span>
             </div>
           ))}
         </div>
@@ -357,13 +357,13 @@ function Editor() {
         <section className="space-y-6">
           {/* Alertas de bloqueio por Game Mode ou HDR Mode */}
           {isGameModeActive && (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm">
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm min-w-0 w-full overflow-hidden">
               <Lock className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold text-amber-300">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="font-semibold text-amber-300 break-words">
                   Modo de Jogo AOC ativo ({s.gameMode})
                 </p>
-                <p className="leading-relaxed">
+                <p className="leading-relaxed break-words">
                   O firmware do monitor AOC assume o controle e bloqueia os ajustes manuais de <strong>Brilho</strong>, <strong>Contraste</strong>, <strong>Gama</strong>, <strong>Modo ECO</strong> e <strong>DCR</strong> enquanto um Modo de Jogo pré-calibrado estiver ativo. Para ajustá-los livremente, defina o Modo de Jogo como <em>"Desligado"</em> na aba <strong>Desempenho</strong>.
                 </p>
               </div>
@@ -371,13 +371,13 @@ function Editor() {
           )}
 
           {!isGameModeActive && isHdrModeActive && (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm">
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm min-w-0 w-full overflow-hidden">
               <Lock className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold text-amber-300">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="font-semibold text-amber-300 break-words">
                   Modo HDR ativo ({s.hdrMode})
                 </p>
-                <p className="leading-relaxed">
+                <p className="leading-relaxed break-words">
                   O perfil HDR em execução calibra dinamicamente a curva de imagem e bloqueia <strong>Contraste</strong>, <strong>Gama</strong> e <strong>Modo ECO</strong>. Para liberar esses controles, defina o Modo HDR como <em>"Off"</em> na aba <strong>Recursos</strong>.
                 </p>
               </div>
@@ -385,13 +385,13 @@ function Editor() {
           )}
 
           {!isGameModeActive && !isHdrModeActive && isEcoModeActive && (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm">
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm min-w-0 w-full overflow-hidden">
               <Lock className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold text-amber-300">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="font-semibold text-amber-300 break-words">
                   Modo ECO ativo ({s.ecoMode})
                 </p>
-                <p className="leading-relaxed">
+                <p className="leading-relaxed break-words">
                   O perfil de economia de energia ECO ({s.ecoMode}) assume a calibração do monitor e bloqueia os ajustes manuais de <strong>Brilho</strong> e <strong>Contraste</strong>. Para ajustá-los livremente, defina o Modo ECO como <em>"Padrão"</em> abaixo.
                 </p>
               </div>
@@ -470,15 +470,15 @@ function Editor() {
       {tab === "color" && (
         <section className="space-y-6">
           {(isGameModeActive || isHdrModeActive) && (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm">
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm min-w-0 w-full overflow-hidden">
               <Lock className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold text-amber-300">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="font-semibold text-amber-300 break-words">
                   {isGameModeActive
                     ? `Modo de Jogo AOC ativo (${s.gameMode})`
                     : `Modo HDR ativo (${s.hdrMode})`}
                 </p>
-                <p className="leading-relaxed">
+                <p className="leading-relaxed break-words">
                   {isGameModeActive
                     ? `O Modo de Jogo AOC calibra e bloqueia o controle manual de Game Color (saturação).`
                     : `O Modo HDR ativo assume a colorimetria do painel e bloqueia a Temperatura de Cor, Game Color e o Filtro de Luz Azul (Low Blue Light).`}
@@ -556,13 +556,13 @@ function Editor() {
       {tab === "perf" && (
         <section className="space-y-6">
           {isHdrModeActive && (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm">
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm min-w-0 w-full overflow-hidden">
               <Lock className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold text-amber-300">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="font-semibold text-amber-300 break-words">
                   Modo HDR ativo ({s.hdrMode})
                 </p>
-                <p className="leading-relaxed">
+                <p className="leading-relaxed break-words">
                   O monitor bloqueia o <strong>Modo de Jogo AOC</strong> e o <strong>Shadow Control</strong> enquanto um perfil HDR estiver em execução. Para usar os Modos de Jogo, desligue o Modo HDR na aba <strong>Recursos</strong>.
                 </p>
               </div>
@@ -570,13 +570,13 @@ function Editor() {
           )}
 
           {!isHdrModeActive && isGameModeActive && (
-            <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 p-4 text-xs text-blue-200 flex items-start gap-3 shadow-sm">
+            <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 p-4 text-xs text-blue-200 flex items-start gap-3 shadow-sm min-w-0 w-full overflow-hidden">
               <Lock className="h-5 w-5 shrink-0 text-blue-400 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold text-blue-300">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="font-semibold text-blue-300 break-words">
                   Modo de Jogo AOC ativo ({s.gameMode})
                 </p>
-                <p className="leading-relaxed">
+                <p className="leading-relaxed break-words">
                   Com o Modo de Jogo ativo, o firmware define automaticamente o <strong>Overdrive</strong> e o <strong>Shadow Control</strong> ideais para esse tipo de jogo, bloqueando alterações manuais.
                 </p>
               </div>
@@ -659,13 +659,13 @@ function Editor() {
       {tab === "extra" && (
         <section className="space-y-6">
           {isGameModeActive && (
-            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm">
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex items-start gap-3 shadow-sm min-w-0 w-full overflow-hidden">
               <Lock className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold text-amber-300">
+              <div className="space-y-1 min-w-0 flex-1">
+                <p className="font-semibold text-amber-300 break-words">
                   Modo de Jogo AOC ativo ({s.gameMode})
                 </p>
-                <p className="leading-relaxed">
+                <p className="leading-relaxed break-words">
                   O <strong>Modo HDR</strong> está bloqueado porque ativar o HDR cancela automaticamente o Modo de Jogo no firmware do monitor AOC. Para ativar o HDR, defina o Modo de Jogo como <em>"Desligado"</em> na aba <strong>Desempenho</strong>.
                 </p>
               </div>
@@ -950,21 +950,24 @@ function Slider({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className={`space-y-1.5 transition-opacity ${disabled ? "opacity-50 select-none" : ""}`}>
-      <div className="flex items-center justify-between text-sm">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">{label}</span>
+    <div className={`space-y-1.5 transition-opacity min-w-0 ${disabled ? "opacity-50 select-none" : ""}`}>
+      <div className="flex items-center justify-between gap-3 text-sm min-w-0">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
+            <span className="text-muted-foreground shrink-0">{label}</span>
             {disabled && disabledReason && (
-              <span className="flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
-                <Lock className="h-2.5 w-2.5" />
-                <span>{disabledReason}</span>
+              <span
+                title={disabledReason}
+                className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md shrink-0 max-w-full"
+              >
+                <Lock className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate">{disabledReason}</span>
               </span>
             )}
           </div>
-          {description && <p className="text-xs text-muted-foreground/80">{description}</p>}
+          {description && <p className="text-xs text-muted-foreground/80 break-words mt-0.5">{description}</p>}
         </div>
-        <span className="font-mono text-xs font-medium">
+        <span className="font-mono text-xs font-medium shrink-0">
           {value}
           {unit}
         </span>
@@ -999,13 +1002,16 @@ function Segmented({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className={`space-y-2 transition-opacity ${disabled ? "opacity-50 select-none" : ""}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">{label}</span>
+    <div className={`space-y-2 transition-opacity min-w-0 ${disabled ? "opacity-50 select-none" : ""}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+        <span className="text-sm text-muted-foreground shrink-0">{label}</span>
         {disabled && disabledReason && (
-          <span className="flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
-            <Lock className="h-2.5 w-2.5" />
-            <span>{disabledReason}</span>
+          <span
+            title={disabledReason}
+            className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md shrink-0 max-w-full"
+          >
+            <Lock className="h-2.5 w-2.5 shrink-0" />
+            <span className="truncate">{disabledReason}</span>
           </span>
         )}
       </div>
@@ -1015,7 +1021,7 @@ function Segmented({
             key={opt}
             disabled={disabled}
             onClick={() => onChange(opt)}
-            className={`flex-1 min-w-[70px] rounded-lg py-1.5 px-3 text-xs font-medium transition ${
+            className={`flex-1 min-w-[50px] sm:min-w-[65px] rounded-lg py-1 sm:py-1.5 px-1.5 sm:px-2 text-[11px] sm:text-xs font-medium transition ${
               value === opt ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             } ${disabled ? "cursor-not-allowed pointer-events-none" : ""}`}
           >
@@ -1048,31 +1054,34 @@ function Toggle({
     <button
       disabled={disabled}
       onClick={() => onChange(!on)}
-      className={`flex w-full items-center justify-between rounded-xl bg-secondary px-4 py-3 text-left transition ${
+      className={`flex w-full items-center justify-between gap-3 rounded-xl bg-secondary px-4 py-3 text-left transition min-w-0 ${
         disabled
           ? "opacity-50 cursor-not-allowed select-none"
-          : "hover:bg-accent"
+          : "hover:bg-accent cursor-pointer"
       }`}
     >
-      <div className="space-y-0.5 pr-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground">{label}</span>
+      <div className="space-y-0.5 min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="text-sm font-medium text-foreground shrink-0">{label}</span>
           {badge && (
-            <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+            <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary shrink-0">
               {badge}
             </span>
           )}
           {disabled && disabledReason && (
-            <span className="flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
-              <Lock className="h-2.5 w-2.5" />
-              <span>{disabledReason}</span>
+            <span
+              title={disabledReason}
+              className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md shrink-0 max-w-full"
+            >
+              <Lock className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{disabledReason}</span>
             </span>
           )}
         </div>
-        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+        {description && <p className="text-xs text-muted-foreground break-words mt-0.5">{description}</p>}
       </div>
       <span
-        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none shrink-0 ${
           on ? "bg-primary" : "bg-muted-foreground/30"
         } ${disabled ? "pointer-events-none" : ""}`}
       >

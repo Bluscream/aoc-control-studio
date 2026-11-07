@@ -37,6 +37,7 @@
 }
 
 :root {
+  color-scheme: dark;
   --radius: 0.875rem;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.97 0 0);
@@ -70,11 +71,17 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    color-scheme: dark;
   }
   h1, h2, h3 { font-family: var(--font-display); }
-  input, textarea {
+  input, textarea, select {
     user-select: text !important;
     -webkit-user-select: text !important;
+    color-scheme: dark;
+  }
+  select option {
+    background-color: #1a1a1a;
+    color: #f7f7f7;
   }
 }
 
