@@ -30,6 +30,9 @@ build_portable() {
 bundle() {
     local kind="$1" pattern="$2"
     echo ">>> [3/3] Gerando pacote $kind..."
+    # Limpa artefatos antigos desse tipo no target e na pasta Distribuicao para manter apenas a versão atual
+    rm -rf "${CARGO_TARGET_DIR:?}/release/bundle/$kind"
+    find "$DIST_DIR" -maxdepth 1 -name "$pattern" -delete 2>/dev/null || true
     pnpm tauri build --bundles "$kind"
     find "$CARGO_TARGET_DIR/release/bundle/$kind" -maxdepth 1 -name "$pattern" -exec cp -f {} "$DIST_DIR/" \;
     echo " [OK] Pacote $kind copiado para $DIST_DIR"
