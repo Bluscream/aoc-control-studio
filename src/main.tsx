@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { RouterProvider, createHashHistory } from "@tanstack/react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { getRouter } from "./router";
+import "./i18n";
 import "./styles.css";
 
 // Encaminha logs e erros do frontend para o terminal / aoc_debug.log do Tauri

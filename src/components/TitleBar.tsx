@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Minus, Square, Copy, X, Monitor } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export function TitleBar() {
+  const { t } = useTranslation();
   const [isMaximized, setIsMaximized] = useState(false);
 
   const checkMax = async () => {
@@ -53,8 +55,8 @@ export function TitleBar() {
           type="button"
           onClick={handleMinimize}
           className="grid h-10 w-11 place-items-center text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-          title="Minimizar"
-          aria-label="Minimizar"
+          title={t("titleBar.minimize")}
+          aria-label={t("titleBar.minimize")}
         >
           <Minus className="h-3.5 w-3.5" />
         </button>
@@ -62,8 +64,8 @@ export function TitleBar() {
           type="button"
           onClick={handleToggleMaximize}
           className="grid h-10 w-11 place-items-center text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-          title={isMaximized ? "Restaurar" : "Maximizar"}
-          aria-label={isMaximized ? "Restaurar" : "Maximizar"}
+          title={isMaximized ? t("titleBar.restore") : t("titleBar.maximize")}
+          aria-label={isMaximized ? t("titleBar.restore") : t("titleBar.maximize")}
         >
           {isMaximized ? (
             <Copy className="h-3 w-3 rotate-180" />
@@ -75,8 +77,8 @@ export function TitleBar() {
           type="button"
           onClick={handleClose}
           className="grid h-10 w-11 place-items-center text-muted-foreground hover:bg-red-600 hover:text-white transition-colors"
-          title="Fechar"
-          aria-label="Fechar"
+          title={t("titleBar.close")}
+          aria-label={t("titleBar.close")}
         >
           <X className="h-3.5 w-3.5" />
         </button>

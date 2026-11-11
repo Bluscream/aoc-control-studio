@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   Monitor,
   Plus,
@@ -47,14 +48,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import i18n from "@/i18n";
+import { translateBackendMessage } from "@/i18n/backend";
+import { useModeLabels } from "@/i18n/modes";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Modos do monitor — AOC Control Studio" },
+      { title: i18n.t("meta.homeTitle") },
       {
         name: "description",
-        content: "Escolha ou crie modos de imagem para o seu monitor AOC 24G2S.",
+        content: i18n.t("meta.homeDescription"),
       },
     ],
   }),
@@ -82,6 +87,8 @@ function getModeIcon(id: string) {
 
 function Index() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { modeName, modeSubtitle } = useModeLabels();
   const {
     modes,
     active,
@@ -124,7 +131,7 @@ function Index() {
     try {
       console.log("[Index] Clique em + Novo modo");
       const nextNum = modes.filter((m) => !m.isBuiltIn).length + 1;
-      const newMode = create(`Modo Personalizado ${nextNum}`);
+      const newMode = create(t("profiles.newName", { n: nextNum }));
       console.log("[Index] Modo criado com sucesso:", newMode.id, newMode.name);
       console.log("[Index] Disparando navegação para /editor...");
       navigate({ to: "/editor", search: { id: newMode.id } });
@@ -139,23 +146,26 @@ function Index() {
         const saved = await exportAllConfigurations();
         if (saved) {
           setFeedbackMsg({
-            text: "Backup completo com todas as configurações exportado com sucesso!",
+            text: t("home.exportedAll"),
           });
           setTimeout(() => setFeedbackMsg(null), 4000);
         }
       } else {
         const saved = await exportSingleProfile(selectedExportProfile);
         if (saved) {
-          const name =
-            modes.find((m) => m.id === selectedExportProfile)?.name ||
-            (selectedExportProfile === "custom" ? "Custom" : selectedExportProfile);
-          setFeedbackMsg({ text: `Perfil "${name}" exportado em JSON com sucesso!` });
+          const exported = modes.find((m) => m.id === selectedExportProfile);
+          const name = exported
+            ? modeName(exported)
+            : selectedExportProfile === "custom"
+              ? t("profiles.custom.name")
+              : selectedExportProfile;
+          setFeedbackMsg({ text: t("home.exportedProfile", { name }) });
           setTimeout(() => setFeedbackMsg(null), 4000);
         }
       }
     } catch (err: unknown) {
       const e = err as { message?: string };
-      setFeedbackMsg({ text: e?.message || "Erro ao exportar JSON.", isError: true });
+      setFeedbackMsg({ text: e?.message || t("home.exportError"), isError: true });
       setTimeout(() => setFeedbackMsg(null), 5000);
     }
   };
@@ -169,8 +179,8 @@ function Index() {
       setShowBackupDialog(false);
     } catch (err: unknown) {
       const e = err as { message?: string };
-      if (e?.message !== "Nenhum arquivo selecionado") {
-        setFeedbackMsg({ text: e?.message || "Erro ao importar arquivo JSON.", isError: true });
+      if (e?.message !== t("storage.noFileSelected")) {
+        setFeedbackMsg({ text: e?.message || t("home.importError"), isError: true });
         setTimeout(() => setFeedbackMsg(null), 6000);
       }
     }
@@ -181,14 +191,17 @@ function Index() {
     setShowConfirmReset(false);
     setShowBackupDialog(false);
     setFeedbackMsg({
-      text: "Todas as configurações e perfis foram restaurados aos padrões originais de fábrica!",
+      text: t("home.resetDone"),
     });
     setTimeout(() => setFeedbackMsg(null), 5000);
   };
 
-  const defaultModeName =
-    modes.find((m) => m.id === defaultModeId)?.name ||
-    (defaultModeId === "custom" ? "Custom" : "Padrão");
+  const defaultMode = modes.find((m) => m.id === defaultModeId);
+  const defaultModeName = defaultMode
+    ? modeName(defaultMode)
+    : defaultModeId === "custom"
+      ? t("profiles.custom.name")
+      : t("profiles.defaultFallback");
 
   return (
     <main className="mx-auto max-w-3xl sm:max-w-4xl px-4 sm:px-6 py-10 sm:py-14 min-w-0">
@@ -208,27 +221,31 @@ function Index() {
                     : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                 }`}
               >
-                {monInfo?.ddcSupported === false ? "DDC Offline" : "DDC/CI Ativo"}
+                {monInfo?.ddcSupported === false ? t("home.ddcOffline") : t("home.ddcActive")}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              {monInfo?.name || "AOC Monitor"} · {monInfo?.connection || "DisplayPort"} · DDC/CI I2C
+              {monInfo?.name || t("home.monitorFallback")} · {monInfo?.connection || "DisplayPort"}{" "}
+              · DDC/CI I2C
             </p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setShowConfirmReset(false);
-            setShowBackupDialog(true);
-          }}
-          className="flex items-center gap-2 rounded-xl border border-border/80 bg-secondary/80 px-3.5 py-2 text-xs font-medium text-muted-foreground transition hover:border-foreground/40 hover:text-foreground hover:bg-secondary cursor-pointer shadow-sm shrink-0"
-          title="Exportar/Importar perfis e gerenciar configurações"
-        >
-          <FolderArchive className="h-4 w-4 text-primary" />
-          <span className="hidden sm:inline">Backup & Perfis</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <LanguageSwitcher />
+          <button
+            type="button"
+            onClick={() => {
+              setShowConfirmReset(false);
+              setShowBackupDialog(true);
+            }}
+            className="flex items-center gap-2 rounded-xl border border-border/80 bg-secondary/80 px-3.5 py-2 text-xs font-medium text-muted-foreground transition hover:border-foreground/40 hover:text-foreground hover:bg-secondary cursor-pointer shadow-sm shrink-0"
+            title={t("home.backupButtonTitle")}
+          >
+            <FolderArchive className="h-4 w-4 text-primary" />
+            <span className="hidden sm:inline">{t("home.backupButton")}</span>
+          </button>
+        </div>
       </header>
 
       {/* Painel de Automação de Perfil por Aplicativo */}
@@ -237,7 +254,7 @@ function Index() {
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-primary" />
             <span className="text-sm font-semibold text-foreground">
-              Troca Automática por Aplicativo
+              {t("home.autoSwitchTitle")}
             </span>
             <span
               className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
@@ -246,16 +263,19 @@ function Index() {
                   : "bg-secondary text-muted-foreground border-border/40"
               }`}
             >
-              {autoProfileEnabled ? "Ativo em 2º plano" : "Desativado"}
+              {autoProfileEnabled ? t("home.autoSwitchOn") : t("home.autoSwitchOff")}
             </span>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Ao focar em um jogo ou executável vinculado, o monitor troca automaticamente para o
-            perfil correspondente. Na Área de Trabalho, ele retorna para o padrão:{" "}
-            <span className="font-semibold text-foreground underline decoration-primary/50 underline-offset-2">
-              {defaultModeName}
-            </span>
-            .
+            <Trans
+              i18nKey="home.autoSwitchDescription"
+              values={{ name: defaultModeName }}
+              components={{
+                highlight: (
+                  <span className="font-semibold text-foreground underline decoration-primary/50 underline-offset-2" />
+                ),
+              }}
+            />
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
@@ -265,7 +285,7 @@ function Index() {
             className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
               autoProfileEnabled ? "bg-primary" : "bg-muted-foreground/30"
             }`}
-            title={autoProfileEnabled ? "Desativar troca automática" : "Ativar troca automática"}
+            title={autoProfileEnabled ? t("home.disableAutoSwitch") : t("home.enableAutoSwitch")}
           >
             <span
               className={`pointer-events-none inline-block h-5 w-5 transform rounded-full shadow-lg ring-0 transition duration-200 ease-in-out ${
@@ -280,11 +300,8 @@ function Index() {
 
       <div className="mb-6 flex items-baseline justify-between">
         <div>
-          <h2 className="mb-1 text-2xl font-semibold tracking-tight">Modos de Imagem</h2>
-          <p className="text-sm text-muted-foreground">
-            Clique no card para ativar, na estrela para torná-lo o padrão do sistema, ou no lápis
-            para vincular executáveis.
-          </p>
+          <h2 className="mb-1 text-2xl font-semibold tracking-tight">{t("home.modesTitle")}</h2>
+          <p className="text-sm text-muted-foreground">{t("home.modesDescription")}</p>
         </div>
       </div>
 
@@ -308,7 +325,7 @@ function Index() {
             type="button"
             onClick={() => setFeedbackMsg(null)}
             className="rounded-lg p-1 text-muted-foreground hover:text-foreground transition cursor-pointer shrink-0"
-            aria-label="Fechar mensagem"
+            aria-label={t("home.closeMessage")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -321,14 +338,14 @@ function Index() {
             {lastWarnings.map((w, i) => (
               <div key={i} className="flex items-start gap-2 min-w-0">
                 <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
-                <span className="break-words min-w-0 flex-1">{w}</span>
+                <span className="break-words min-w-0 flex-1">{translateBackendMessage(t, w)}</span>
               </div>
             ))}
           </div>
           <button
             onClick={clearWarnings}
             className="rounded-lg p-1 text-amber-300/70 hover:text-amber-100 transition cursor-pointer shrink-0"
-            aria-label="Fechar aviso"
+            aria-label={t("home.closeWarning")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -339,8 +356,8 @@ function Index() {
         {/* Modo Custom (Ajuste livre) */}
         <ModeCard
           id="custom"
-          name="Custom"
-          subtitle="Ajuste livre · Customizado"
+          name={t("profiles.custom.name")}
+          subtitle={t("profiles.custom.subtitle")}
           active={active === "custom"}
           isDefault={defaultModeId === "custom"}
           onSetDefault={() => setDefaultMode("custom")}
@@ -349,7 +366,7 @@ function Index() {
           onExport={async () => {
             const saved = await exportSingleProfile("custom");
             if (saved) {
-              setFeedbackMsg({ text: "Perfil Custom exportado em JSON com sucesso!" });
+              setFeedbackMsg({ text: t("home.exportedCustom") });
               setTimeout(() => setFeedbackMsg(null), 4000);
             }
           }}
@@ -361,8 +378,8 @@ function Index() {
           <ModeCard
             key={m.id}
             id={m.id}
-            name={m.name}
-            subtitle={m.subtitle || `${m.settings.brightness}% brilho · ${m.settings.overdrive}`}
+            name={modeName(m)}
+            subtitle={modeSubtitle(m)}
             active={active === m.id}
             isDefault={defaultModeId === m.id}
             assignedExes={m.assignedExes}
@@ -375,7 +392,7 @@ function Index() {
             onExport={async () => {
               const saved = await exportSingleProfile(m.id);
               if (saved) {
-                setFeedbackMsg({ text: `Perfil "${m.name}" exportado em JSON com sucesso!` });
+                setFeedbackMsg({ text: t("home.exportedProfile", { name: modeName(m) }) });
                 setTimeout(() => setFeedbackMsg(null), 4000);
               }
             }}
@@ -392,7 +409,7 @@ function Index() {
           <div className="grid h-11 w-11 place-items-center rounded-xl bg-secondary/80 text-muted-foreground transition group-hover:bg-primary group-hover:text-primary-foreground group-hover:scale-105">
             <Plus className="h-5 w-5" />
           </div>
-          <span className="font-semibold tracking-tight">Novo modo</span>
+          <span className="font-semibold tracking-tight">{t("home.newMode")}</span>
         </button>
       </div>
 
@@ -402,10 +419,10 @@ function Index() {
           <DialogHeader className="space-y-1 text-left">
             <DialogTitle className="flex items-center gap-2 text-base font-semibold">
               <FolderArchive className="h-5 w-5 text-primary shrink-0" />
-              <span>Backup e Gerenciamento de Perfis</span>
+              <span>{t("backup.title")}</span>
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
-              Exporte, importe ou restaure as configurações e modos de imagem em arquivos JSON.
+              {t("backup.description")}
             </DialogDescription>
           </DialogHeader>
 
@@ -414,11 +431,10 @@ function Index() {
             <div className="rounded-xl border border-border/70 bg-secondary/40 p-3 sm:p-3.5 space-y-2.5">
               <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
                 <Download className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span>Exportar Configurações (JSON)</span>
+                <span>{t("backup.exportTitle")}</span>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Gere um arquivo JSON com todas as configurações do aplicativo ou selecione apenas um
-                perfil específico.
+                {t("backup.exportDescription")}
               </p>
               <div className="flex items-center gap-2 min-w-0 w-full">
                 <div className="flex-1 min-w-0">
@@ -428,16 +444,16 @@ function Index() {
                   >
                     <SelectTrigger className="w-full h-8 rounded-lg border border-border/80 bg-background/90 px-2.5 py-1 text-xs text-foreground cursor-pointer focus:ring-1 focus:ring-primary min-w-0 overflow-hidden">
                       <SelectValue
-                        placeholder="Selecione um perfil..."
+                        placeholder={t("backup.selectPlaceholder")}
                         className="truncate block min-w-0"
                       />
                     </SelectTrigger>
                     <SelectContent className="border border-border/80 bg-popover text-popover-foreground z-[100] max-h-56">
                       <SelectItem value="all" className="text-xs py-1.5 cursor-pointer">
-                        ★ Todas as configurações (Backup Completo)
+                        {t("backup.allOption")}
                       </SelectItem>
                       <SelectItem value="custom" className="text-xs py-1.5 cursor-pointer">
-                        Custom (Ajuste livre)
+                        {t("backup.customOption")}
                       </SelectItem>
                       {modes.map((m) => (
                         <SelectItem
@@ -445,7 +461,8 @@ function Index() {
                           value={m.id}
                           className="text-xs py-1.5 cursor-pointer"
                         >
-                          {m.name} {m.isBuiltIn ? "(Padrão AOC)" : "(Personalizado)"}
+                          {modeName(m)}{" "}
+                          {m.isBuiltIn ? t("backup.builtInSuffix") : t("backup.userSuffix")}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -457,7 +474,7 @@ function Index() {
                   className="flex items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:opacity-90 transition cursor-pointer shrink-0 h-8 shadow-sm"
                 >
                   <Download className="h-3.5 w-3.5" />
-                  <span>Exportar</span>
+                  <span>{t("backup.exportButton")}</span>
                 </button>
               </div>
             </div>
@@ -466,11 +483,10 @@ function Index() {
             <div className="rounded-xl border border-border/70 bg-secondary/40 p-3 sm:p-3.5 space-y-2.5">
               <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
                 <Upload className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                <span>Importar Arquivo JSON</span>
+                <span>{t("backup.importTitle")}</span>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Selecione um arquivo .json para restaurar um backup completo ou importar um perfil
-                individual. O sistema detecta o formato automaticamente.
+                {t("backup.importDescription")}
               </p>
               <button
                 type="button"
@@ -478,7 +494,7 @@ function Index() {
                 className="flex w-full items-center justify-center gap-2 rounded-lg border border-border/80 bg-background/80 hover:bg-background px-3 py-1.5 text-xs font-medium text-foreground transition cursor-pointer hover:border-emerald-500/40 h-8 shadow-sm"
               >
                 <FileJson className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                <span className="truncate">Selecionar Arquivo JSON (.json)...</span>
+                <span className="truncate">{t("backup.importButton")}</span>
               </button>
             </div>
 
@@ -486,16 +502,15 @@ function Index() {
             <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 sm:p-3.5 space-y-2.5">
               <div className="flex items-center gap-2 text-xs font-semibold text-red-400">
                 <RotateCcw className="h-3.5 w-3.5 shrink-0" />
-                <span>Restaurar Configurações de Fábrica</span>
+                <span>{t("backup.resetTitle")}</span>
               </div>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Apaga todos os perfis personalizados e desfaz quaisquer edições feitas nos perfis
-                padrão da AOC, retornando o app ao estado de recém-instalado.
+                {t("backup.resetDescription")}
               </p>
               {showConfirmReset ? (
                 <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-red-500/20">
                   <span className="text-[11px] font-medium text-amber-300">
-                    Tem certeza absoluta?
+                    {t("backup.resetConfirm")}
                   </span>
                   <div className="flex items-center gap-2 shrink-0">
                     <button
@@ -503,14 +518,14 @@ function Index() {
                       onClick={() => setShowConfirmReset(false)}
                       className="px-2.5 py-1 text-[11px] rounded-lg border border-border bg-background text-muted-foreground hover:text-foreground cursor-pointer h-7"
                     >
-                      Cancelar
+                      {t("backup.cancel")}
                     </button>
                     <button
                       type="button"
                       onClick={handleResetAll}
                       className="px-2.5 py-1 text-[11px] rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition cursor-pointer shadow-sm h-7"
                     >
-                      Sim, Limpar Tudo
+                      {t("backup.resetYes")}
                     </button>
                   </div>
                 </div>
@@ -520,7 +535,7 @@ function Index() {
                   onClick={() => setShowConfirmReset(true)}
                   className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 underline underline-offset-2 pt-0.5 cursor-pointer"
                 >
-                  <span>Limpar dados e restaurar padrões</span>
+                  <span>{t("backup.resetLink")}</span>
                 </button>
               )}
             </div>
@@ -562,6 +577,7 @@ function ModeCard({
   onExport?: (() => void) | undefined;
   icon?: React.ReactNode | undefined;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`panel group relative flex min-h-[170px] aspect-square flex-col p-4 transition-all min-w-0 ${
@@ -572,7 +588,7 @@ function ModeCard({
         onClick={onSelect}
         disabled={applying}
         className="absolute inset-0 rounded-xl cursor-pointer"
-        aria-label={`Usar ${name}`}
+        aria-label={t("modeCard.use", { name })}
       />
 
       <div className="flex items-start justify-between relative z-10">
@@ -588,10 +604,10 @@ function ModeCard({
             {isDefault && (
               <span
                 className="flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[9px] font-semibold text-primary"
-                title="Perfil padrão (quando nenhum app vinculado estiver em foco)"
+                title={t("modeCard.defaultTitle")}
               >
                 <Star className="h-2.5 w-2.5 fill-current" />
-                <span>Padrão</span>
+                <span>{t("modeCard.defaultBadge")}</span>
               </span>
             )}
             {applying ? (
@@ -620,18 +636,14 @@ function ModeCard({
                     ? "bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
                     : "bg-secondary/80 border-border/60 text-muted-foreground/60 hover:text-muted-foreground hover:border-border"
                 }`}
-                title={
-                  autoSwitchEnabled
-                    ? "Troca automática ATIVA para este perfil (clique para desativar)"
-                    : "Troca automática DESATIVADA para este perfil (clique para ativar)"
-                }
+                title={autoSwitchEnabled ? t("modeCard.autoOnTitle") : t("modeCard.autoOffTitle")}
               >
                 <span
                   className={`h-1.5 w-1.5 rounded-full ${
                     autoSwitchEnabled ? "bg-primary animate-pulse" : "bg-muted-foreground/40"
                   }`}
                 />
-                <span>Auto</span>
+                <span>{t("modeCard.auto")}</span>
                 <span
                   className={`relative inline-flex h-3 w-5 flex-shrink-0 rounded-full border border-transparent transition-colors duration-200 ease-in-out ${
                     autoSwitchEnabled ? "bg-primary" : "bg-muted-foreground/30"
@@ -670,7 +682,9 @@ function ModeCard({
               {assignedExes.length > 2 ? ` +${assignedExes.length - 2}` : ""}
             </span>
             {!autoSwitchEnabled && (
-              <span className="text-[9px] text-amber-400/90 font-medium ml-1">(pausado)</span>
+              <span className="text-[9px] text-amber-400/90 font-medium ml-1">
+                {t("modeCard.paused")}
+              </span>
             )}
           </div>
         )}
@@ -685,8 +699,8 @@ function ModeCard({
               onSetDefault();
             }}
             className="rounded-lg p-2 text-muted-foreground transition hover:bg-background/80 hover:text-amber-400 cursor-pointer"
-            title="Definir como perfil padrão"
-            aria-label="Definir como padrão"
+            title={t("modeCard.setDefaultTitle")}
+            aria-label={t("modeCard.setDefaultLabel")}
           >
             <Star className="h-4 w-4" />
           </button>
@@ -699,8 +713,8 @@ function ModeCard({
               onExport();
             }}
             className="rounded-lg p-2 text-muted-foreground transition hover:bg-background/80 hover:text-foreground cursor-pointer"
-            title="Exportar este perfil em JSON"
-            aria-label="Exportar"
+            title={t("modeCard.exportTitle")}
+            aria-label={t("modeCard.exportLabel")}
           >
             <Download className="h-4 w-4" />
           </button>
@@ -713,8 +727,8 @@ function ModeCard({
               onRemove();
             }}
             className="rounded-lg p-2 text-muted-foreground transition hover:bg-background/80 hover:text-red-400 cursor-pointer"
-            title="Excluir modo"
-            aria-label="Excluir"
+            title={t("modeCard.deleteTitle")}
+            aria-label={t("modeCard.deleteLabel")}
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -724,8 +738,8 @@ function ModeCard({
           search={{ id }}
           onClick={(e) => e.stopPropagation()}
           className="rounded-lg p-2 text-muted-foreground transition hover:bg-background/80 hover:text-foreground cursor-pointer"
-          title="Editar configurações e vincular executáveis"
-          aria-label="Editar"
+          title={t("modeCard.editTitle")}
+          aria-label={t("modeCard.editLabel")}
         >
           <Pencil className="h-4 w-4" />
         </Link>

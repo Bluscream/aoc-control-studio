@@ -861,6 +861,28 @@ fn is_window_maximized(window: tauri::Window) -> bool {
     window.is_maximized().unwrap_or(false)
 }
 
+const TRAY_ID: &str = "main";
+
+fn build_tray_menu<R: tauri::Runtime, M: Manager<R>>(
+    manager: &M,
+    show_label: &str,
+    quit_label: &str,
+) -> tauri::Result<tauri::menu::Menu<R>> {
+    let show_item = tauri::menu::MenuItem::with_id(manager, "show", show_label, true, None::<&str>)?;
+    let quit_item = tauri::menu::MenuItem::with_id(manager, "quit", quit_label, true, None::<&str>)?;
+    tauri::menu::Menu::with_items(manager, &[&show_item, &quit_item])
+}
+
+/// Atualiza os rótulos do menu da bandeja com o idioma escolhido no frontend.
+#[tauri::command]
+fn set_tray_labels(app: tauri::AppHandle, show: String, quit: String) -> Result<(), String> {
+    let tray = app
+        .tray_by_id(TRAY_ID)
+        .ok_or_else(|| "Ícone da bandeja não encontrado".to_string())?;
+    let menu = build_tray_menu(&app, &show, &quit).map_err(|e| e.to_string())?;
+    tray.set_menu(Some(menu)).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn update_auto_profile_config(
     config: AutoProfileConfig,
@@ -1721,12 +1743,11 @@ pub fn run() {
             start_overdrive_verifier_loop(app.handle().clone());
             start_profile_verifier_loop(app.handle().clone());
 
-            let show_item = tauri::menu::MenuItem::with_id(app, "show", "Abrir AOC Control Studio", true, None::<&str>)?;
-            let quit_item = tauri::menu::MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
-            let menu = tauri::menu::Menu::with_items(app, &[&show_item, &quit_item])?;
+            // Rótulos iniciais; o frontend os substitui pelo idioma ativo via set_tray_labels
+            let menu = build_tray_menu(app, "Abrir AOC Control Studio", "Sair")?;
 
             if let Some(icon) = app.default_window_icon().cloned() {
-                let _tray = tauri::tray::TrayIconBuilder::new()
+                let _tray = tauri::tray::TrayIconBuilder::with_id(TRAY_ID)
                     .icon(icon)
                     .tooltip("AOC Control Studio")
                     .menu(&menu)
@@ -1782,7 +1803,8 @@ pub fn run() {
             minimize_window,
             toggle_maximize_window,
             close_window,
-            is_window_maximized
+            is_window_maximized,
+            set_tray_labels
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

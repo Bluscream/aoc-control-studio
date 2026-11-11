@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   Sun,
@@ -40,13 +41,17 @@ import {
   type MonitorInfo,
   type RunningAppInfo,
 } from "@/lib/modes";
+import i18n from "@/i18n";
+import { translateBackendMessage } from "@/i18n/backend";
+import { useModeLabels } from "@/i18n/modes";
+import { useValueLabel } from "@/i18n/values";
 
 export const Route = createFileRoute("/editor")({
   validateSearch: (s: Record<string, unknown>) => ({ id: typeof s["id"] === "string" ? s["id"] : "custom" }),
   head: () => ({
     meta: [
-      { title: "Editar modo — AOC Control Studio" },
-      { name: "description", content: "Ajuste brilho, cor, overdrive, freesync e recursos do monitor AOC 24G2S." },
+      { title: i18n.t("meta.editorTitle") },
+      { name: "description", content: i18n.t("meta.editorDescription") },
     ],
   }),
   component: Editor,
@@ -55,15 +60,26 @@ export const Route = createFileRoute("/editor")({
 const IS_LINUX = typeof navigator !== "undefined" && /linux/i.test(navigator.userAgent);
 
 const tabs = [
-  { id: "image", label: "Imagem", icon: Sun },
-  { id: "color", label: "Cor", icon: Palette },
-  { id: "perf", label: "Desempenho", icon: Zap },
-  { id: "extra", label: "Recursos", icon: Sparkles },
-  { id: "apps", label: "Aplicativos", icon: Gamepad2 },
+  { id: "image", icon: Sun },
+  { id: "color", icon: Palette },
+  { id: "perf", icon: Zap },
+  { id: "extra", icon: Sparkles },
+  { id: "apps", icon: Gamepad2 },
 ] as const;
+
+// Componentes usados nos textos com marcação (<strong>, <em>, ...) dos arquivos de idioma
+const richText = {
+  strong: <strong />,
+  em: <em />,
+  mono: <span className="font-mono text-primary" />,
+  code: <span className="font-mono" />,
+};
 
 function Editor() {
   const { id } = Route.useSearch();
+  const { t } = useTranslation();
+  const { modeName } = useModeLabels();
+  const valueLabel = useValueLabel();
   const [name, setName] = useState("");
   const [initialName, setInitialName] = useState("");
   const [s, setS] = useState<Settings>(defaultSettings);
@@ -178,7 +194,7 @@ function Editor() {
       setS(live);
       // Mantém initialSettings diferente caso o perfil salvo seja diferente, permitindo salvar no perfil se quiser
     } else {
-      setWarnings(["Não foi possível ler os valores atuais do monitor via DDC/CI."]);
+      setWarnings([t("editor.readFailed")]);
     }
     setReadingHw(false);
   };
@@ -197,10 +213,12 @@ function Editor() {
   const isHdrModeActive = s.hdrMode !== "Off";
   const isEcoModeActive = s.ecoMode !== "Padrão";
 
-  const gameModeBlockReason = `Bloqueado (Modo de Jogo - ${s.gameMode})`;
-  const hdrModeBlockReason = `Bloqueado (HDR - ${s.hdrMode})`;
-  const ecoModeBlockReason = `Bloqueado (Modo ECO - ${s.ecoMode})`;
-  const dcrBlockReason = "Bloqueado (DCR Ativo)";
+  const gameModeLabel = valueLabel(s.gameMode);
+  const ecoModeLabel = valueLabel(s.ecoMode);
+  const gameModeBlockReason = t("editor.blocked.gameMode", { mode: gameModeLabel });
+  const hdrModeBlockReason = t("editor.blocked.hdr", { mode: s.hdrMode });
+  const ecoModeBlockReason = t("editor.blocked.eco", { mode: ecoModeLabel });
+  const dcrBlockReason = t("editor.blocked.dcr");
 
   const manualLumLocked = !isGameModeActive && !isEcoModeActive && s.dcr;
 
@@ -214,9 +232,7 @@ function Editor() {
       setAssignedExesState(origExes);
       const b = builtInModes.find((x) => x.id === id);
       if (b) setName(b.name);
-      setWarnings([
-        `Valores do perfil "${b?.name || id}" restaurados para o padrão original de fábrica da AOC. Clique em "Salvar no Monitor" para aplicar ao hardware.`,
-      ]);
+      setWarnings([t("editor.resetDone", { name: b ? modeName(b) : id })]);
     }
   };
 
@@ -226,14 +242,14 @@ function Editor() {
         to="/"
         className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
       >
-        <ArrowLeft className="h-4 w-4" /> Voltar aos Modos
+        <ArrowLeft className="h-4 w-4" /> {t("editor.back")}
       </Link>
 
       <div className="grid grid-cols-1 sm:grid-cols-[minmax(35%,1fr)_auto] items-start sm:items-center justify-between gap-6 mb-6">
         <div className="min-w-0 pr-2">
           {builtInModes.some((b) => b.id === id) || id === "custom" ? (
             <h1 className="mb-1 text-2xl sm:text-3xl font-semibold tracking-tight break-words">
-              {name || "Modo"}
+              {modeName({ id, name }) || t("profiles.fallbackName")}
             </h1>
           ) : (
             <div className="mb-1 flex items-center gap-2 group">
@@ -241,14 +257,14 @@ function Editor() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Nome do modo..."
+                placeholder={t("editor.namePlaceholder")}
                 className="w-full max-w-sm bg-transparent text-2xl sm:text-3xl font-semibold tracking-tight text-foreground border-b border-transparent hover:border-border/60 focus:border-primary pb-0.5 outline-none transition"
               />
               <Pencil className="h-4 w-4 text-muted-foreground/50 group-hover:text-muted-foreground transition shrink-0" />
             </div>
           )}
           <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-            Ajuste os controles livremente. Os comandos só são enviados ao monitor ao clicar em Salvar.
+            {t("editor.intro")}
           </p>
         </div>
 
@@ -257,11 +273,11 @@ function Editor() {
             <button
               type="button"
               onClick={handleResetToDefault}
-              title="Restaurar este perfil para as configurações originais de fábrica da AOC"
+              title={t("editor.resetTitle")}
               className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-medium bg-secondary text-amber-300 hover:text-amber-200 hover:bg-amber-500/10 border border-amber-500/20 transition cursor-pointer h-9 sm:h-10"
             >
               <RotateCcw className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Restaurar Padrão</span>
+              <span className="truncate">{t("editor.resetButton")}</span>
             </button>
           )}
 
@@ -272,25 +288,27 @@ function Editor() {
                 await exportSingleProfile(id);
               } catch (err: unknown) {
                 const e = err as { message?: string };
-                setWarnings([e?.message || "Erro ao exportar perfil."]);
+                setWarnings([e?.message || t("editor.exportError")]);
               }
             }}
-            title="Escolher onde salvar as configurações deste perfil em arquivo JSON"
+            title={t("editor.exportTitle")}
             className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition cursor-pointer h-9 sm:h-10"
           >
             <Download className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">Exportar JSON</span>
+            <span className="truncate">{t("editor.exportButton")}</span>
           </button>
 
           <button
             type="button"
             onClick={handleReadFromMonitor}
             disabled={readingHw || saving}
-            title="Carregar os valores que estão ativos agora no monitor"
+            title={t("editor.readTitle")}
             className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-medium bg-secondary text-muted-foreground hover:text-foreground transition cursor-pointer h-9 sm:h-10"
           >
             <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${readingHw ? "animate-spin" : ""}`} />
-            <span className="truncate">{readingHw ? "Lendo..." : "Ler do Monitor"}</span>
+            <span className="truncate">
+              {readingHw ? t("editor.reading") : t("editor.readButton")}
+            </span>
           </button>
 
           <button
@@ -310,17 +328,19 @@ function Editor() {
             {saving ? (
               <>
                 <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent shrink-0" />
-                <span className="truncate">Aplicando...</span>
+                <span className="truncate">{t("editor.applying")}</span>
               </>
             ) : savedSuccess ? (
               <>
                 <Check className="h-3.5 w-3.5 stroke-[3] shrink-0" />
-                <span className="truncate">Salvo e Aplicado!</span>
+                <span className="truncate">{t("editor.saved")}</span>
               </>
             ) : (
               <>
                 <Save className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{hasChanges ? "Salvar no Monitor" : "Sem alterações"}</span>
+                <span className="truncate">
+                  {hasChanges ? t("editor.save") : t("editor.noChanges")}
+                </span>
               </>
             )}
           </button>
@@ -332,23 +352,23 @@ function Editor() {
           {warnings.map((w, idx) => (
             <div key={idx} className="flex items-start gap-2 min-w-0">
               <AlertCircle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
-              <span className="break-words min-w-0 flex-1">{w}</span>
+              <span className="break-words min-w-0 flex-1">{translateBackendMessage(t, w)}</span>
             </div>
           ))}
         </div>
       )}
 
       <nav className="mb-6 flex gap-1 rounded-xl bg-secondary p-1">
-        {tabs.map(({ id: t, label, icon: Icon }) => (
+        {tabs.map(({ id: tabId, icon: Icon }) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tabId}
+            onClick={() => setTab(tabId)}
             className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition ${
-              tab === t ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              tab === tabId ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Icon className="h-4 w-4" />
-            <span className="hidden sm:inline">{label}</span>
+            <span className="hidden sm:inline">{t(`editor.tabs.${tabId}`)}</span>
           </button>
         ))}
       </nav>
@@ -361,10 +381,10 @@ function Editor() {
               <Lock className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
               <div className="space-y-1 min-w-0 flex-1">
                 <p className="font-semibold text-amber-300 break-words">
-                  Modo de Jogo AOC ativo ({s.gameMode})
+                  {t("editor.lock.gameModeActive", { mode: gameModeLabel })}
                 </p>
                 <p className="leading-relaxed break-words">
-                  O firmware do monitor AOC assume o controle e bloqueia os ajustes manuais de <strong>Brilho</strong>, <strong>Contraste</strong>, <strong>Gama</strong>, <strong>Modo ECO</strong> e <strong>DCR</strong> enquanto um Modo de Jogo pré-calibrado estiver ativo. Para ajustá-los livremente, defina o Modo de Jogo como <em>"Desligado"</em> na aba <strong>Desempenho</strong>.
+                  <Trans i18nKey="editor.lock.imageGameMode" components={richText} />
                 </p>
               </div>
             </div>
@@ -375,10 +395,10 @@ function Editor() {
               <Lock className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
               <div className="space-y-1 min-w-0 flex-1">
                 <p className="font-semibold text-amber-300 break-words">
-                  Modo HDR ativo ({s.hdrMode})
+                  {t("editor.lock.hdrActive", { mode: s.hdrMode })}
                 </p>
                 <p className="leading-relaxed break-words">
-                  O perfil HDR em execução calibra dinamicamente a curva de imagem e bloqueia <strong>Contraste</strong>, <strong>Gama</strong> e <strong>Modo ECO</strong>. Para liberar esses controles, defina o Modo HDR como <em>"Off"</em> na aba <strong>Recursos</strong>.
+                  <Trans i18nKey="editor.lock.imageHdr" components={richText} />
                 </p>
               </div>
             </div>
@@ -389,18 +409,22 @@ function Editor() {
               <Lock className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
               <div className="space-y-1 min-w-0 flex-1">
                 <p className="font-semibold text-amber-300 break-words">
-                  Modo ECO ativo ({s.ecoMode})
+                  {t("editor.lock.ecoActive", { mode: ecoModeLabel })}
                 </p>
                 <p className="leading-relaxed break-words">
-                  O perfil de economia de energia ECO ({s.ecoMode}) assume a calibração do monitor e bloqueia os ajustes manuais de <strong>Brilho</strong> e <strong>Contraste</strong>. Para ajustá-los livremente, defina o Modo ECO como <em>"Padrão"</em> abaixo.
+                  <Trans
+                    i18nKey="editor.lock.imageEco"
+                    values={{ mode: ecoModeLabel }}
+                    components={richText}
+                  />
                 </p>
               </div>
             </div>
           )}
 
-          <Section title="Iluminação & Contraste">
+          <Section title={t("editor.image.lightingTitle")}>
             <Slider
-              label="Brilho"
+              label={t("editor.image.brightness")}
               value={s.brightness}
               min={0}
               max={100}
@@ -416,7 +440,7 @@ function Editor() {
               onChange={set("brightness")}
             />
             <Slider
-              label="Contraste"
+              label={t("editor.image.contrast")}
               value={s.contrast}
               min={0}
               max={100}
@@ -432,15 +456,13 @@ function Editor() {
               onChange={set("contrast")}
             />
             {manualLumLocked && (
-              <p className="text-xs text-amber-400/90 pt-1">
-                Nota: No firmware AOC, enquanto o DCR estiver ligado ou o Modo ECO não estiver em "Padrão", o monitor controla o brilho e o contraste automaticamente.
-              </p>
+              <p className="text-xs text-amber-400/90 pt-1">{t("editor.image.dcrNote")}</p>
             )}
           </Section>
 
-          <Section title="Processamento de Imagem">
+          <Section title={t("editor.image.processingTitle")}>
             <Segmented
-              label="Curva de Gamma"
+              label={t("editor.image.gamma")}
               value={s.gamma}
               options={["Gamma 1", "Gamma 2", "Gamma 3"]}
               disabled={isGameModeActive || isHdrModeActive}
@@ -448,7 +470,7 @@ function Editor() {
               onChange={set("gamma")}
             />
             <Segmented
-              label="Modo ECO"
+              label={t("editor.image.ecoMode")}
               value={s.ecoMode}
               options={["Padrão", "Texto", "Internet", "Jogo", "Filme", "Esportes", "Leitura"]}
               disabled={isGameModeActive || isHdrModeActive}
@@ -456,8 +478,8 @@ function Editor() {
               onChange={set("ecoMode")}
             />
             <Toggle
-              label="DCR (Contraste Dinâmico)"
-              description="Ajusta o contraste automaticamente com base na cena exibida"
+              label={t("editor.image.dcr")}
+              description={t("editor.image.dcrDescription")}
               on={s.dcr}
               disabled={isGameModeActive}
               disabledReason={gameModeBlockReason}
@@ -475,21 +497,19 @@ function Editor() {
               <div className="space-y-1 min-w-0 flex-1">
                 <p className="font-semibold text-amber-300 break-words">
                   {isGameModeActive
-                    ? `Modo de Jogo AOC ativo (${s.gameMode})`
-                    : `Modo HDR ativo (${s.hdrMode})`}
+                    ? t("editor.lock.gameModeActive", { mode: gameModeLabel })
+                    : t("editor.lock.hdrActive", { mode: s.hdrMode })}
                 </p>
                 <p className="leading-relaxed break-words">
-                  {isGameModeActive
-                    ? `O Modo de Jogo AOC calibra e bloqueia o controle manual de Game Color (saturação).`
-                    : `O Modo HDR ativo assume a colorimetria do painel e bloqueia a Temperatura de Cor, Game Color e o Filtro de Luz Azul (Low Blue Light).`}
+                  {isGameModeActive ? t("editor.lock.colorGameMode") : t("editor.lock.colorHdr")}
                 </p>
               </div>
             </div>
           )}
 
-          <Section title="Temperatura de Cor">
+          <Section title={t("editor.color.tempTitle")}>
             <Segmented
-              label="Predefinição"
+              label={t("editor.color.preset")}
               value={s.colorTemp}
               options={["sRGB", "Quente", "Normal", "Frio", "UserRGB"]}
               disabled={isHdrModeActive}
@@ -499,7 +519,7 @@ function Editor() {
             {s.colorTemp === "UserRGB" && (
               <div className="space-y-4 pt-2">
                 <Slider
-                  label="Vermelho (R)"
+                  label={t("editor.color.red")}
                   value={s.r}
                   min={0}
                   max={100}
@@ -508,7 +528,7 @@ function Editor() {
                   onChange={set("r")}
                 />
                 <Slider
-                  label="Verde (G)"
+                  label={t("editor.color.green")}
                   value={s.g}
                   min={0}
                   max={100}
@@ -517,7 +537,7 @@ function Editor() {
                   onChange={set("g")}
                 />
                 <Slider
-                  label="Azul (B)"
+                  label={t("editor.color.blue")}
                   value={s.b}
                   min={0}
                   max={100}
@@ -529,20 +549,20 @@ function Editor() {
             )}
           </Section>
 
-          <Section title="Realce & Conforto Visual">
+          <Section title={t("editor.color.enhanceTitle")}>
             <Slider
-              label="Game Color (Saturação Gamer)"
+              label={t("editor.color.gameColor")}
               value={s.gameColor}
               min={0}
               max={20}
               step={1}
-              description="Escala real do hardware AOC (0 = P&B, 10 = Padrão, 20 = Saturação máxima)"
+              description={t("editor.color.gameColorDescription")}
               disabled={isGameModeActive || isHdrModeActive}
               disabledReason={isGameModeActive ? gameModeBlockReason : hdrModeBlockReason}
               onChange={set("gameColor")}
             />
             <Segmented
-              label="Low Blue Light (Filtro de Luz Azul)"
+              label={t("editor.color.lowBlue")}
               value={s.lowBlue}
               options={["Desligado", "Multimídia", "Internet", "Escritório", "Leitura"]}
               disabled={isHdrModeActive}
@@ -560,10 +580,10 @@ function Editor() {
               <Lock className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
               <div className="space-y-1 min-w-0 flex-1">
                 <p className="font-semibold text-amber-300 break-words">
-                  Modo HDR ativo ({s.hdrMode})
+                  {t("editor.lock.hdrActive", { mode: s.hdrMode })}
                 </p>
                 <p className="leading-relaxed break-words">
-                  O monitor bloqueia o <strong>Modo de Jogo AOC</strong> e o <strong>Shadow Control</strong> enquanto um perfil HDR estiver em execução. Para usar os Modos de Jogo, desligue o Modo HDR na aba <strong>Recursos</strong>.
+                  <Trans i18nKey="editor.lock.perfHdr" components={richText} />
                 </p>
               </div>
             </div>
@@ -574,18 +594,18 @@ function Editor() {
               <Lock className="h-5 w-5 shrink-0 text-blue-400 mt-0.5" />
               <div className="space-y-1 min-w-0 flex-1">
                 <p className="font-semibold text-blue-300 break-words">
-                  Modo de Jogo AOC ativo ({s.gameMode})
+                  {t("editor.lock.gameModeActive", { mode: gameModeLabel })}
                 </p>
                 <p className="leading-relaxed break-words">
-                  Com o Modo de Jogo ativo, o firmware define automaticamente o <strong>Overdrive</strong> e o <strong>Shadow Control</strong> ideais para esse tipo de jogo, bloqueando alterações manuais.
+                  <Trans i18nKey="editor.lock.perfGameMode" components={richText} />
                 </p>
               </div>
             </div>
           )}
 
-          <Section title="Otimização para Jogos">
+          <Section title={t("editor.perf.gamingTitle")}>
             <Segmented
-              label="Modo de Jogo AOC"
+              label={t("editor.perf.gameMode")}
               value={s.gameMode}
               options={["Desligado", "FPS", "RTS", "Corrida", "Gamer 1", "Gamer 2", "Gamer 3"]}
               disabled={isHdrModeActive}
@@ -593,7 +613,7 @@ function Editor() {
               onChange={set("gameMode")}
             />
             <Segmented
-              label="Overdrive"
+              label={t("editor.perf.overdrive")}
               value={s.overdrive}
               options={["Desligado", "Fraco", "Médio", "Forte", "Boost"]}
               disabled={isGameModeActive}
@@ -601,54 +621,54 @@ function Editor() {
               onChange={set("overdrive")}
             />
             <Slider
-              label="Shadow Control"
+              label={t("editor.perf.shadowControl")}
               value={s.shadowControl}
               min={0}
               max={100}
               step={10}
-              description="Ajusta áreas escuras em passos de 10 (50 = Neutro)"
+              description={t("editor.perf.shadowDescription")}
               disabled={isGameModeActive || isHdrModeActive}
               disabledReason={isGameModeActive ? gameModeBlockReason : hdrModeBlockReason}
               onChange={set("shadowControl")}
             />
           </Section>
 
-          <Section title="Sincronização Gamer">
+          <Section title={t("editor.perf.syncTitle")}>
             <Toggle
-              label="AMD FreeSync / Taxa Variável (VRR)"
+              label={t("editor.perf.adaptiveSync")}
               description={
                 monInfo && !monInfo.adaptiveSyncSupported
-                  ? "Deixe 'Adaptive-Sync' ligado uma única vez nos botões físicos do monitor (Config. Jogo → Adaptive-Sync) para liberar o controle via software."
-                  : "Ativa o AMD FreeSync no driver Radeon e a Taxa de Atualização Variável (VRR) nas configurações de tela do sistema para eliminar tearing"
+                  ? t("editor.perf.adaptiveSyncOsdHint")
+                  : t("editor.perf.adaptiveSyncDescription")
               }
               badge={
                 monInfo
                   ? monInfo.adaptiveSyncSupported
-                    ? "FreeSync + VRR"
-                    : "Requer OSD Ativo"
-                  : "VRR"
+                    ? t("editor.perf.badgeSupported")
+                    : t("editor.perf.badgeOsd")
+                  : t("editor.perf.badgeVrr")
               }
               on={s.adaptiveSync}
               onChange={set("adaptiveSync")}
             />
             {IS_LINUX ? (
               <div className="rounded-xl bg-secondary/50 p-3 text-xs text-muted-foreground/90 space-y-1">
-                <p className="font-medium text-foreground">💡 Informação sobre o Linux:</p>
+                <p className="font-medium text-foreground">{t("editor.perf.linuxTitle")}</p>
                 <p>
-                  No Linux o VRR é controlado pelo compositor (COSMIC via <span className="font-mono text-primary">cosmic-randr</span>, KDE via <span className="font-mono text-primary">kscreen-doctor</span>). Confira o estado em Configurações → Telas.
+                  <Trans i18nKey="editor.perf.linuxVrr" components={richText} />
                 </p>
                 <p>
-                  Se aparecer "Requer OSD Ativo", ligue <em>Adaptive-Sync</em> nos botões físicos do monitor e verifique se o driver <span className="font-mono">amdgpu</span> anuncia suporte para a saída.
+                  <Trans i18nKey="editor.perf.linuxOsd" components={richText} />
                 </p>
               </div>
             ) : (
               <div className="rounded-xl bg-secondary/50 p-3 text-xs text-muted-foreground/90 space-y-1">
-                <p className="font-medium text-foreground">💡 Informação sobre o Windows 11:</p>
+                <p className="font-medium text-foreground">{t("editor.perf.windowsTitle")}</p>
                 <p>
-                  A linha <span className="font-mono text-primary">"Taxa de atualização variável: Com suporte (48 Hz - 165 Hz)"</span> no Windows confirma que o FreeSync está 100% ativo.
+                  <Trans i18nKey="editor.perf.windowsVrr" components={richText} />
                 </p>
                 <p>
-                  A opção <em>"Taxa de atualização dinâmica"</em> exibida nas configurações do Windows é o DRR (exclusivo para economia de bateria de laptops) e não se aplica a placas de vídeo desktop como a RX 6600.
+                  <Trans i18nKey="editor.perf.windowsDrr" components={richText} />
                 </p>
               </div>
             )}
@@ -663,43 +683,41 @@ function Editor() {
               <Lock className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
               <div className="space-y-1 min-w-0 flex-1">
                 <p className="font-semibold text-amber-300 break-words">
-                  Modo de Jogo AOC ativo ({s.gameMode})
+                  {t("editor.lock.gameModeActive", { mode: gameModeLabel })}
                 </p>
                 <p className="leading-relaxed break-words">
-                  O <strong>Modo HDR</strong> está bloqueado porque ativar o HDR cancela automaticamente o Modo de Jogo no firmware do monitor AOC. Para ativar o HDR, defina o Modo de Jogo como <em>"Desligado"</em> na aba <strong>Desempenho</strong>.
+                  <Trans i18nKey="editor.lock.extraGameMode" components={richText} />
                 </p>
               </div>
             </div>
           )}
 
-          <Section title="Assistência em Tela">
+          <Section title={t("editor.extra.osdTitle")}>
             <Toggle
-              label="Dial Point (Mira na Tela)"
-              description="Exibe a mira nativa de hardware do monitor no centro da tela"
-              badge="Crosshair"
+              label={t("editor.extra.dialPoint")}
+              description={t("editor.extra.dialPointDescription")}
+              badge={t("editor.extra.crosshairBadge")}
               on={s.crosshair}
               onChange={set("crosshair")}
             />
             <Segmented
-              label="Contador de Quadros (Frame Counter)"
+              label={t("editor.extra.frameCounter")}
               value={s.frameCounter}
               options={["Desligado", "Sup. Direito", "Inf. Direito", "Inf. Esquerdo", "Sup. Esquerdo"]}
               onChange={set("frameCounter")}
             />
           </Section>
 
-          <Section title="Perfis HDR (HDR Mode)">
+          <Section title={t("editor.extra.hdrTitle")}>
             <Segmented
-              label="Modo HDR do Monitor"
+              label={t("editor.extra.hdrMode")}
               value={s.hdrMode}
               options={["Off", "HDR Picture", "HDR Movie", "HDR Game"]}
               disabled={isGameModeActive}
               disabledReason={gameModeBlockReason}
               onChange={set("hdrMode")}
             />
-            <p className="text-xs text-muted-foreground/85">
-              O AOC 24G2S conta com perfis avançados integrados no firmware (Off, HDR Picture, HDR Movie e HDR Game) que expandem dinamicamente o contraste e saturação de cores sem distorcer o sinal SDR.
-            </p>
+            <p className="text-xs text-muted-foreground/85">{t("editor.extra.hdrDescription")}</p>
           </Section>
         </section>
       )}
@@ -707,20 +725,22 @@ function Editor() {
       {tab === "apps" && (
         <section className="space-y-6">
           {/* Perfil Padrão do Sistema */}
-          <Section title="Padrão do Sistema Operacional">
+          <Section title={t("editor.apps.defaultTitle")}>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl bg-secondary/40 p-4 border border-border/50">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Star className={`h-4 w-4 ${isDefault ? "text-amber-400 fill-amber-400" : "text-muted-foreground"}`} />
-                  <span className="text-sm font-semibold text-foreground">Definir como Perfil Padrão do Sistema</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {t("editor.apps.setDefault")}
+                  </span>
                   {isDefault && (
                     <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
-                      Padrão Atual
+                      {t("editor.apps.currentDefault")}
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Quando você fechar os jogos vinculados ou simplesmente estiver navegando na Área de Trabalho, o monitor aplicará automaticamente este perfil.
+                  {t("editor.apps.defaultDescription")}
                 </p>
               </div>
               <button
@@ -733,22 +753,20 @@ function Editor() {
                     : "bg-primary text-primary-foreground hover:opacity-90 shadow-sm"
                 }`}
               >
-                {isDefault ? "Padrão Ativo" : "Tornar Padrão"}
+                {isDefault ? t("editor.apps.defaultActive") : t("editor.apps.makeDefault")}
               </button>
             </div>
           </Section>
 
           {/* Jogos e Executáveis Vinculados */}
-          <Section title="Jogos e Executáveis Vinculados">
-            <p className="text-xs text-muted-foreground">
-              Sempre que qualquer um dos executáveis abaixo entrar em primeiro plano, o monitor alternará para este perfil automaticamente.
-            </p>
+          <Section title={t("editor.apps.linkedTitle")}>
+            <p className="text-xs text-muted-foreground">{t("editor.apps.linkedDescription")}</p>
 
             {/* Lista de tags de executáveis */}
             <div className="flex flex-wrap gap-2 pt-1">
               {assignedExes.length === 0 ? (
                 <div className="w-full rounded-xl border border-dashed border-border/70 p-6 text-center text-xs text-muted-foreground">
-                  Nenhum executável vinculado a este perfil. Digite o nome do executável abaixo ou escolha entre os aplicativos atualmente abertos no sistema.
+                  {t("editor.apps.noExes")}
                 </div>
               ) : (
                 assignedExes.map((exe) => (
@@ -762,7 +780,7 @@ function Editor() {
                       type="button"
                       onClick={() => handleRemoveExe(exe)}
                       className="rounded-full p-0.5 text-muted-foreground hover:bg-background hover:text-red-400 transition"
-                      title={`Remover ${exe}`}
+                      title={t("editor.apps.removeExe", { exe })}
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -781,7 +799,7 @@ function Editor() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleAddExe(newExe);
                   }}
-                  placeholder="Ex: cs2.exe, valorant.exe, firefox, steam..."
+                  placeholder={t("editor.apps.exePlaceholder")}
                   className="w-full rounded-xl bg-secondary/60 border border-border/80 px-4 py-2.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary transition font-mono"
                 />
               </div>
@@ -792,16 +810,16 @@ function Editor() {
                 className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-secondary text-xs font-medium text-foreground hover:bg-primary hover:text-primary-foreground transition disabled:opacity-50 disabled:pointer-events-none"
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>Adicionar</span>
+                <span>{t("editor.apps.add")}</span>
               </button>
               <button
                 type="button"
                 onClick={handleLoadRunningApps}
                 className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border/80 bg-secondary/40 text-xs font-medium text-foreground hover:bg-secondary transition"
-                title="Detectar janelas e jogos abertos agora"
+                title={t("editor.apps.runningTitle")}
               >
                 <Search className="h-3.5 w-3.5 text-primary" />
-                <span>Apps Abertos Agora</span>
+                <span>{t("editor.apps.runningButton")}</span>
               </button>
             </div>
 
@@ -812,7 +830,7 @@ function Editor() {
                   <div className="flex items-center gap-2">
                     <Laptop className="h-4 w-4 text-primary" />
                     <span className="text-xs font-semibold text-foreground">
-                      Aplicativos e Jogos detectados
+                      {t("editor.apps.detectedTitle")}
                     </span>
                   </div>
                   <button
@@ -828,18 +846,18 @@ function Editor() {
                   type="text"
                   value={appsSearch}
                   onChange={(e) => setAppsSearch(e.target.value)}
-                  placeholder="Filtrar aplicativos abertos..."
+                  placeholder={t("editor.apps.filterPlaceholder")}
                   className="w-full rounded-lg bg-secondary/60 border border-border/60 px-3 py-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary transition"
                 />
 
                 {loadingApps ? (
                   <div className="py-6 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
                     <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    <span>Detectando janelas ativas...</span>
+                    <span>{t("editor.apps.detecting")}</span>
                   </div>
                 ) : filteredRunningApps.length === 0 ? (
                   <div className="py-4 text-center text-xs text-muted-foreground">
-                    Nenhum aplicativo encontrado com este filtro.
+                    {t("editor.apps.noMatch")}
                   </div>
                 ) : (
                   <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
@@ -864,7 +882,7 @@ function Editor() {
                                 : "bg-primary text-primary-foreground hover:opacity-90 shadow-sm"
                             }`}
                           >
-                            {alreadyAdded ? "Vinculado" : "+ Vincular"}
+                            {alreadyAdded ? t("editor.apps.linked") : t("editor.apps.link")}
                           </button>
                         </div>
                       );
@@ -881,8 +899,8 @@ function Editor() {
       {hasChanges && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl flex items-center justify-between rounded-2xl border border-border/80 bg-card/95 p-4 backdrop-blur-xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-4">
           <div className="text-sm">
-            <span className="font-semibold text-foreground">Alterações pendentes</span>
-            <p className="text-xs text-muted-foreground">Clique para enviar as configurações para o monitor.</p>
+            <span className="font-semibold text-foreground">{t("editor.pending.title")}</span>
+            <p className="text-xs text-muted-foreground">{t("editor.pending.description")}</p>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -891,7 +909,7 @@ function Editor() {
               className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              <span>Descartar</span>
+              <span>{t("editor.pending.discard")}</span>
             </button>
             <button
               onClick={handleSave}
@@ -901,12 +919,12 @@ function Editor() {
               {saving ? (
                 <>
                   <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  <span>Enviando...</span>
+                  <span>{t("editor.pending.sending")}</span>
                 </>
               ) : (
                 <>
                   <Save className="h-3.5 w-3.5" />
-                  <span>Salvar e Aplicar</span>
+                  <span>{t("editor.pending.saveApply")}</span>
                 </>
               )}
             </button>
@@ -1001,6 +1019,7 @@ function Segmented({
   disabledReason?: string | undefined;
   onChange: (v: string) => void;
 }) {
+  const valueLabel = useValueLabel();
   return (
     <div className={`space-y-2 transition-opacity min-w-0 ${disabled ? "opacity-50 select-none" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
@@ -1025,7 +1044,7 @@ function Segmented({
               value === opt ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
             } ${disabled ? "cursor-not-allowed pointer-events-none" : ""}`}
           >
-            {opt}
+            {valueLabel(opt)}
           </button>
         ))}
       </div>

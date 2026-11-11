@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import i18n from "@/i18n";
 
 export type RunningAppInfo = {
   name: string;
@@ -412,7 +413,7 @@ function getStoredUserModes(): Mode[] {
       const id = String(m.id || generateId());
       return {
         id,
-        name: String(m.name || "Modo"),
+        name: String(m.name || i18n.t("profiles.fallbackName")),
         subtitle: typeof m.subtitle === "string" ? m.subtitle : undefined,
         isBuiltIn: false,
         settings: normalizeSettings(m.settings as unknown as RawSettings),
@@ -520,10 +521,12 @@ export function useModes() {
     create: (name: string): Mode => {
       const current = loadSettings("custom")?.settings || defaultSettings;
       const newId = generateId();
-      const safeName = name.trim() || `Modo ${modes.length + 1}`;
+      const safeName = name.trim() || i18n.t("profiles.numberedName", { n: modes.length + 1 });
       const m: Mode = {
         id: newId,
         name: safeName,
+        // O subtítulo salvo mantém o formato original; a interface exibe uma versão
+        // traduzida gerada a partir das configurações (ver src/i18n/modes.ts).
         subtitle: `${current.brightness}% brilho · ${current.overdrive}`,
         isBuiltIn: false,
         settings: { ...current },
@@ -693,7 +696,7 @@ export function pickAndReadJsonFile<T = unknown>(): Promise<{ filename: string; 
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) {
-        reject(new Error("Nenhum arquivo selecionado"));
+        reject(new Error(i18n.t("storage.noFileSelected")));
         return;
       }
       const reader = new FileReader();
@@ -702,10 +705,10 @@ export function pickAndReadJsonFile<T = unknown>(): Promise<{ filename: string; 
           const parsed = JSON.parse(reader.result as string);
           resolve({ filename: file.name, data: parsed });
         } catch {
-          reject(new Error("Arquivo JSON inválido ou corrompido."));
+          reject(new Error(i18n.t("storage.invalidJson")));
         }
       };
-      reader.onerror = () => reject(new Error("Falha ao ler o arquivo."));
+      reader.onerror = () => reject(new Error(i18n.t("storage.readFailed")));
       reader.readAsText(file);
     };
     input.click();
@@ -727,7 +730,7 @@ export async function exportSingleProfile(id: string): Promise<boolean> {
   } else {
     mode = [...getMergedBuiltIns(), ...getStoredUserModes()].find((m) => m.id === id);
   }
-  if (!mode) throw new Error("Perfil não encontrado");
+  if (!mode) throw new Error(i18n.t("storage.profileNotFound"));
   const assigned = getAssignedExes(id);
   const data: AocSingleProfileData = {
     version: 1,
@@ -799,7 +802,7 @@ export function importSingleProfile(profileData: AocSingleProfileData["profile"]
     const id = exists ? profileData.id : generateId();
     const newMode: Mode = {
       id,
-      name: profileData.name || "Modo Importado",
+      name: profileData.name || i18n.t("profiles.importedName"),
       subtitle: `${cleanSettings.brightness}% brilho · ${cleanSettings.overdrive}`,
       isBuiltIn: false,
       settings: cleanSettings,
@@ -827,7 +830,7 @@ export function importAllConfigurations(backup: Partial<AocBackupData>) {
   if (Array.isArray(backup.userModes)) {
     const cleanUserModes: Mode[] = backup.userModes.map((m) => ({
       id: String(m.id || generateId()),
-      name: String(m.name || "Modo"),
+      name: String(m.name || i18n.t("profiles.fallbackName")),
       subtitle: typeof m.subtitle === "string" ? m.subtitle : undefined,
       isBuiltIn: false,
       settings: normalizeSettings(m.settings as unknown as RawSettings),
@@ -865,7 +868,7 @@ export async function handleFileImport(): Promise<{
 }> {
   const { filename, data } = await pickAndReadJsonFile<any>();
   if (!data || typeof data !== "object") {
-    throw new Error("Arquivo inválido: JSON vazio ou formato incorreto.");
+    throw new Error(i18n.t("storage.emptyJson"));
   }
 
   // 1. Perfil individual encapsulado
@@ -873,7 +876,7 @@ export async function handleFileImport(): Promise<{
     const imported = importSingleProfile(data.profile);
     return {
       type: "single",
-      message: `Perfil "${imported.name}" importado com sucesso a partir de ${filename}!`,
+      message: i18n.t("storage.importedSingleFrom", { name: imported.name, filename }),
     };
   }
 
@@ -889,7 +892,7 @@ export async function handleFileImport(): Promise<{
     });
     return {
       type: "single",
-      message: `Perfil "${imported.name}" importado com sucesso!`,
+      message: i18n.t("storage.importedSingle", { name: imported.name }),
     };
   }
 
@@ -899,11 +902,11 @@ export async function handleFileImport(): Promise<{
     const count = (data.userModes?.length || 0) + Object.keys(data.builtinOverrides || {}).length;
     return {
       type: "all",
-      message: `Backup completo importado com sucesso! (${count} perfis/modificações restaurados de ${filename}).`,
+      message: i18n.t("storage.importedAll", { count, filename }),
     };
   }
 
-  throw new Error("Estrutura do arquivo JSON não reconhecida como perfil ou backup do AOC Control Studio.");
+  throw new Error(i18n.t("storage.unknownFormat"));
 }
 
 export function resetBuiltInModeToDefault(id: string): Settings | null {
